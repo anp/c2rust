@@ -15,7 +15,7 @@
 //!
 //! gets translated to
 //!
-//! ```rust
+//! ```ignore
 //! let mut current_block: &'static str;
 //! if i > 5i32 { current_block = "s_7"; } else { current_block = "s_14"; }
 //! loop  {
@@ -37,7 +37,7 @@
 //!
 //! The example from above then can be translated into
 //!
-//! ```rust
+//! ```ignore
 //! if i > 5i32 {
 //!     while i > 0i32 {
 //!         i -= 3i32
