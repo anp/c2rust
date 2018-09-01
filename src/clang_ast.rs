@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use serde_cbor::{Value, from_value};
 use serde_cbor::error;
+use serde_cbor::{from_value, Value};
 use std;
+use std::collections::HashMap;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct AstNode {
     pub tag: ASTEntryTag,
     pub children: Vec<Option<u64>>,
@@ -16,13 +16,13 @@ pub struct AstNode {
     pub extras: Vec<Value>,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct TypeNode {
     pub tag: TypeTag,
     pub extras: Vec<Value>,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct CommentNode {
     pub fileid: u64,
     pub line: u64,
@@ -75,20 +75,24 @@ fn import_type_tag(tag: u64) -> TypeTag {
 }
 
 pub fn process(items: Value) -> error::Result<AstContext> {
-
     let mut asts: HashMap<u64, AstNode> = HashMap::new();
     let mut types: HashMap<u64, TypeNode> = HashMap::new();
     let mut comments: Vec<CommentNode> = vec![];
 
-    let (all_nodes, top_nodes, _filenames, raw_comments):
-        (Vec<Vec<Value>>,
-         Vec<u64>,
-         Vec<String>,
-         Vec<(u64, u64, u64, String)>,
-        ) = from_value(items)?;
+    let (all_nodes, top_nodes, _filenames, raw_comments): (
+        Vec<Vec<Value>>,
+        Vec<u64>,
+        Vec<String>,
+        Vec<(u64, u64, u64, String)>,
+    ) = from_value(items)?;
 
     for (fileid, line, column, string) in raw_comments {
-        comments.push(CommentNode{fileid, line, column, string})
+        comments.push(CommentNode {
+            fileid,
+            line,
+            column,
+            string,
+        })
     }
 
     for entry in all_nodes {
@@ -96,12 +100,12 @@ pub fn process(items: Value) -> error::Result<AstContext> {
         let tag = entry[1].as_u64().unwrap();
 
         if tag < 400 {
-
-            let children =
-                entry[2].as_array().unwrap()
-                    .iter()
-                    .map(|x| expect_opt_u64(x).unwrap())
-                    .collect::<Vec<Option<u64>>>();
+            let children = entry[2]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| expect_opt_u64(x).unwrap())
+                .collect::<Vec<Option<u64>>>();
 
             let type_id: Option<u64> = expect_opt_u64(&entry[6]).unwrap();
 

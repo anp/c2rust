@@ -1,11 +1,11 @@
+use c_ast::CDeclId;
 use c_ast::*;
+use renamer::*;
 use rust_ast::mk;
+use std::collections::{HashMap, HashSet};
+use std::ops::Index;
 use syntax::ast::*;
 use syntax::ptr::P;
-use std::ops::Index;
-use renamer::*;
-use std::collections::{HashSet,HashMap};
-use c_ast::CDeclId;
 
 pub struct TypeConverter {
     pub translate_valist: bool,
@@ -16,38 +16,111 @@ pub struct TypeConverter {
 
 static RESERVED_NAMES: [&str; 100] = [
     // Keywords currently in use
-    "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn",
-    "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
-    "ref", "return", "Self", "self", "static", "struct", "super", "trait", "true",
-    "type", "unsafe", "use", "where", "while",
-
+    "as",
+    "break",
+    "const",
+    "continue",
+    "crate",
+    "else",
+    "enum",
+    "extern",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "impl",
+    "in",
+    "let",
+    "loop",
+    "match",
+    "mod",
+    "move",
+    "mut",
+    "pub",
+    "ref",
+    "return",
+    "Self",
+    "self",
+    "static",
+    "struct",
+    "super",
+    "trait",
+    "true",
+    "type",
+    "unsafe",
+    "use",
+    "where",
+    "while",
     // Keywords reserved for future use
-    "abstract", "alignof", "become", "box", "do", "final", "macro", "offsetof",
-    "override", "priv", "proc", "pure", "sizeof", "typeof", "unsized", "virtual",
+    "abstract",
+    "alignof",
+    "become",
+    "box",
+    "do",
+    "final",
+    "macro",
+    "offsetof",
+    "override",
+    "priv",
+    "proc",
+    "pure",
+    "sizeof",
+    "typeof",
+    "unsized",
+    "virtual",
     "yield",
-
     // Types exported in prelude
-    "Copy", "Send", "Sized", "Sync",
-    "Drop", "Fn", "FnMut", "FnOnce",
-    "Box", "ToOwned", "Clone",
-    "PartialEq", "PartialOrd", "Eq", "Ord",
-    "AsRef", "AsMut", "Into", "From",
+    "Copy",
+    "Send",
+    "Sized",
+    "Sync",
+    "Drop",
+    "Fn",
+    "FnMut",
+    "FnOnce",
+    "Box",
+    "ToOwned",
+    "Clone",
+    "PartialEq",
+    "PartialOrd",
+    "Eq",
+    "Ord",
+    "AsRef",
+    "AsMut",
+    "Into",
+    "From",
     "Default",
-    "Iterator", "Extend", "IntoIterator", "DoubleEndedIterator", "ExactSizeIterator",
-    "Option", "Result", "SliceConcatExt",
-    "String", "ToString",
+    "Iterator",
+    "Extend",
+    "IntoIterator",
+    "DoubleEndedIterator",
+    "ExactSizeIterator",
+    "Option",
+    "Result",
+    "SliceConcatExt",
+    "String",
+    "ToString",
     "Vec",
-
-    "bool", "char",
-    "f32", "f64",
-    "i8", "i16", "i32", "i64", "i128", "isize",
-    "u8", "u16", "u32", "u64", "u128", "usize",
+    "bool",
+    "char",
+    "f32",
+    "f64",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "i128",
+    "isize",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "u128",
+    "usize",
     "str",
-
 ];
 
 impl TypeConverter {
-
     pub fn new() -> TypeConverter {
         TypeConverter {
             translate_valist: false,
@@ -62,7 +135,9 @@ impl TypeConverter {
     }
 
     pub fn declare_decl_name(&mut self, decl_id: CDeclId, name: &str) -> String {
-        self.renamer.insert(decl_id, name).expect("Name already assigned")
+        self.renamer
+            .insert(decl_id, name)
+            .expect("Name already assigned")
     }
 
     pub fn alias_decl_name(&mut self, new_decl_id: CDeclId, old_decl_id: CDeclId) {
@@ -73,42 +148,52 @@ impl TypeConverter {
         self.renamer.get(&decl_id)
     }
 
-    pub fn declare_field_name(&mut self, record_id: CRecordId, field_id: CFieldId, name: &str) -> String {
-
+    pub fn declare_field_name(
+        &mut self,
+        record_id: CRecordId,
+        field_id: CFieldId,
+        name: &str,
+    ) -> String {
         let name = if name.is_empty() { "unnamed" } else { name };
 
         if !self.fields.contains_key(&record_id) {
             self.fields.insert(record_id, Renamer::new(&RESERVED_NAMES));
         }
 
-        self.fields.get_mut(&record_id).unwrap()
-            .insert(field_id, name).expect("Field already declared")
+        self.fields
+            .get_mut(&record_id)
+            .unwrap()
+            .insert(field_id, name)
+            .expect("Field already declared")
     }
 
     /** Resolve the Rust name associated with a field declaration. The optional record_id
     is used as a hint to speed up the process of finding the field's name.
     */
-    pub fn resolve_field_name(&self, record_id: Option<CRecordId>, field_id: CFieldId) -> Option<String> {
+    pub fn resolve_field_name(
+        &self,
+        record_id: Option<CRecordId>,
+        field_id: CFieldId,
+    ) -> Option<String> {
         match record_id {
             Some(record_id) => self.fields.get(&record_id).and_then(|x| x.get(&field_id)),
             None => self.fields.values().flat_map(|x| x.get(&field_id)).next(),
         }
-
     }
 
     /// Helper function handling conversion of function types in `convert`.
     /// Optional return type excludes a ty when a function doesn't return.
     fn convert_function(
-      &mut self,
-      ctxt: &TypedAstContext,
-      ret: Option<CQualTypeId>,
-      params: &Vec<CQualTypeId>,
-      is_variadic: bool
+        &mut self,
+        ctxt: &TypedAstContext,
+        ret: Option<CQualTypeId>,
+        params: &Vec<CQualTypeId>,
+        is_variadic: bool,
     ) -> Result<P<Ty>, String> {
-        let inputs = params.iter().map(|x|
-            mk().arg(self.convert(ctxt, x.ctype).unwrap(),
-                                 mk().wild_pat())
-        ).collect();
+        let inputs = params
+            .iter()
+            .map(|x| mk().arg(self.convert(ctxt, x.ctype).unwrap(), mk().wild_pat()))
+            .collect();
 
         let output = match ret {
             None => mk().never_ty(),
@@ -119,24 +204,36 @@ impl TypeConverter {
         return Ok(mk().unsafe_().abi("C").barefn_ty(fn_ty));
     }
 
-    pub fn convert_pointer(&mut self, ctxt: &TypedAstContext, qtype: CQualTypeId) -> Result<P<Ty>, String> {
-
+    pub fn convert_pointer(
+        &mut self,
+        ctxt: &TypedAstContext,
+        qtype: CQualTypeId,
+    ) -> Result<P<Ty>, String> {
         match ctxt.resolve_type(qtype.ctype).kind {
-
             // While void converts to () in function returns, it converts to c_void
             // in the case of pointers.
             CTypeKind::Void => {
-                let mutbl = if qtype.qualifiers.is_const { Mutability::Immutable } else { Mutability::Mutable };
-                return Ok(mk().set_mutbl(mutbl).ptr_ty(mk().path_ty(vec!["libc","c_void"])))
+                let mutbl = if qtype.qualifiers.is_const {
+                    Mutability::Immutable
+                } else {
+                    Mutability::Mutable
+                };
+                return Ok(mk()
+                    .set_mutbl(mutbl)
+                    .ptr_ty(mk().path_ty(vec!["libc", "c_void"])));
             }
 
-            CTypeKind::VariableArray(mut elt,_len) => {
+            CTypeKind::VariableArray(mut elt, _len) => {
                 while let CTypeKind::VariableArray(elt_, _) = ctxt.resolve_type(elt).kind {
                     elt = elt_
                 }
                 let child_ty = self.convert(ctxt, elt)?;
-                let mutbl = if qtype.qualifiers.is_const { Mutability::Immutable } else { Mutability::Mutable };
-                return Ok(mk().set_mutbl(mutbl).ptr_ty(child_ty))
+                let mutbl = if qtype.qualifiers.is_const {
+                    Mutability::Immutable
+                } else {
+                    Mutability::Mutable
+                };
+                return Ok(mk().set_mutbl(mutbl).ptr_ty(child_ty));
             }
 
             // Function pointers are translated to Option applied to the function type
@@ -146,52 +243,58 @@ impl TypeConverter {
                 let fn_ty = self.convert_function(ctxt, opt_ret, params, is_var)?;
                 let param = mk().angle_bracketed_param_types(vec![fn_ty]);
                 let optn_ty = mk().path_ty(vec![mk().path_segment_with_params("Option", param)]);
-                return Ok(optn_ty)
+                return Ok(optn_ty);
             }
 
             CTypeKind::Struct(struct_id) => {
-
                 if self.translate_valist {
-                    if let CDeclKind::Struct { name: Some(ref struct_name), .. } = ctxt[struct_id].kind {
+                    if let CDeclKind::Struct {
+                        name: Some(ref struct_name),
+                        ..
+                    } = ctxt[struct_id].kind
+                    {
                         if struct_name == "__va_list_tag" {
                             self.features.insert("c_variadic");
-                            let path = vec!["","std","ffi","VaList"];
+                            let path = vec!["", "std", "ffi", "VaList"];
                             let ty = mk().path_ty(path);
-                            return Ok(ty)
+                            return Ok(ty);
                         }
                     }
                 }
             }
 
-            _ => {},
+            _ => {}
         }
 
         let child_ty = self.convert(ctxt, qtype.ctype)?;
-        let mutbl = if qtype.qualifiers.is_const { Mutability::Immutable } else { Mutability::Mutable };
+        let mutbl = if qtype.qualifiers.is_const {
+            Mutability::Immutable
+        } else {
+            Mutability::Mutable
+        };
         Ok(mk().set_mutbl(mutbl).ptr_ty(child_ty))
     }
 
     /// Convert a `C` type to a `Rust` one. For the moment, these are expected to have compatible
     /// memory layouts.
     pub fn convert(&mut self, ctxt: &TypedAstContext, ctype: CTypeId) -> Result<P<Ty>, String> {
-
         match ctxt.index(ctype).kind {
             CTypeKind::Void => Ok(mk().tuple_ty(vec![] as Vec<P<Ty>>)),
             CTypeKind::Bool => Ok(mk().path_ty(mk().path(vec!["bool"]))),
-            CTypeKind::Short => Ok(mk().path_ty(mk().path(vec!["libc","c_short"]))),
-            CTypeKind::Int => Ok(mk().path_ty(mk().path(vec!["libc","c_int"]))),
-            CTypeKind::Long => Ok(mk().path_ty(mk().path(vec!["libc","c_long"]))),
-            CTypeKind::LongLong => Ok(mk().path_ty(mk().path(vec!["libc","c_longlong"]))),
-            CTypeKind::UShort => Ok(mk().path_ty(mk().path(vec!["libc","c_ushort"]))),
-            CTypeKind::UInt => Ok(mk().path_ty(mk().path(vec!["libc","c_uint"]))),
-            CTypeKind::ULong => Ok(mk().path_ty(mk().path(vec!["libc","c_ulong"]))),
-            CTypeKind::ULongLong => Ok(mk().path_ty(mk().path(vec!["libc","c_ulonglong"]))),
-            CTypeKind::SChar => Ok(mk().path_ty(mk().path(vec!["libc","c_schar"]))),
-            CTypeKind::UChar => Ok(mk().path_ty(mk().path(vec!["libc","c_uchar"]))),
-            CTypeKind::Char => Ok(mk().path_ty(mk().path(vec!["libc","c_char"]))),
-            CTypeKind::Double => Ok(mk().path_ty(mk().path(vec!["libc","c_double"]))),
-            CTypeKind::LongDouble => Ok(mk().path_ty(mk().path(vec!["libc","c_double"]))),
-            CTypeKind::Float => Ok(mk().path_ty(mk().path(vec!["libc","c_float"]))),
+            CTypeKind::Short => Ok(mk().path_ty(mk().path(vec!["libc", "c_short"]))),
+            CTypeKind::Int => Ok(mk().path_ty(mk().path(vec!["libc", "c_int"]))),
+            CTypeKind::Long => Ok(mk().path_ty(mk().path(vec!["libc", "c_long"]))),
+            CTypeKind::LongLong => Ok(mk().path_ty(mk().path(vec!["libc", "c_longlong"]))),
+            CTypeKind::UShort => Ok(mk().path_ty(mk().path(vec!["libc", "c_ushort"]))),
+            CTypeKind::UInt => Ok(mk().path_ty(mk().path(vec!["libc", "c_uint"]))),
+            CTypeKind::ULong => Ok(mk().path_ty(mk().path(vec!["libc", "c_ulong"]))),
+            CTypeKind::ULongLong => Ok(mk().path_ty(mk().path(vec!["libc", "c_ulonglong"]))),
+            CTypeKind::SChar => Ok(mk().path_ty(mk().path(vec!["libc", "c_schar"]))),
+            CTypeKind::UChar => Ok(mk().path_ty(mk().path(vec!["libc", "c_uchar"]))),
+            CTypeKind::Char => Ok(mk().path_ty(mk().path(vec!["libc", "c_char"]))),
+            CTypeKind::Double => Ok(mk().path_ty(mk().path(vec!["libc", "c_double"]))),
+            CTypeKind::LongDouble => Ok(mk().path_ty(mk().path(vec!["libc", "c_double"]))),
+            CTypeKind::Float => Ok(mk().path_ty(mk().path(vec!["libc", "c_float"]))),
             CTypeKind::Int128 => Ok(mk().path_ty(mk().path(vec!["i128"]))),
             CTypeKind::UInt128 => Ok(mk().path_ty(mk().path(vec!["u128"]))),
 
@@ -202,7 +305,9 @@ impl TypeConverter {
             CTypeKind::Paren(ref ctype) => self.convert(ctxt, *ctype),
 
             CTypeKind::Struct(decl_id) => {
-                let new_name = self.resolve_decl_name(decl_id).ok_or_else(|| format!("Unknown decl id {:?}", decl_id))?;
+                let new_name = self
+                    .resolve_decl_name(decl_id)
+                    .ok_or_else(|| format!("Unknown decl id {:?}", decl_id))?;
                 Ok(mk().path_ty(mk().path(vec![new_name])))
             }
 
@@ -223,7 +328,10 @@ impl TypeConverter {
 
             CTypeKind::ConstantArray(element, count) => {
                 let ty = self.convert(ctxt, element)?;
-                Ok(mk().array_ty(ty, mk().lit_expr(mk().int_lit(count as u128, LitIntType::Unsuffixed))))
+                Ok(mk().array_ty(
+                    ty,
+                    mk().lit_expr(mk().int_lit(count as u128, LitIntType::Unsuffixed)),
+                ))
             }
 
             CTypeKind::IncompleteArray(element) => {

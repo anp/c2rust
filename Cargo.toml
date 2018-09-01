@@ -1,5 +1,5 @@
 [package]
-name = "ast_importer"
+name = "c2rust"
 version = "0.1.0"
 authors = ["Eric Mertens <emertens@galois.com>", "Alec Theriault <atheriault@galois.com>"]
 build = "build.rs"

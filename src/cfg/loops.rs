@@ -18,7 +18,6 @@
 
 use super::*;
 
-
 /// Modifies the `body_blocks`, `follow_blocks`, and `follow_entries` to try to get all of the
 /// `desired_body` labels into the body. If it is not possible to do this, returns `false` (and the
 /// mutable references passed in cannot be used).
@@ -28,16 +27,22 @@ pub fn match_loop_body(
     follow_blocks: &mut HashMap<Label, BasicBlock<StructureLabel<StmtOrDecl>, StmtOrDecl>>,
     follow_entries: &mut HashSet<Label>,
 ) -> bool {
-
     // Keep moving `follow_entries` that are also in `desired_body` into the loop's `body_blocks`
     let mut something_happened = true;
     while something_happened {
         something_happened = false;
 
-        let to_move: Vec<Label> = follow_entries.intersection(&desired_body).cloned().collect();
+        let to_move: Vec<Label> = follow_entries
+            .intersection(&desired_body)
+            .cloned()
+            .collect();
 
         for following in to_move {
-            let bb = if let Some(bb) = follow_blocks.remove(&following) { bb } else { continue; };
+            let bb = if let Some(bb) = follow_blocks.remove(&following) {
+                bb
+            } else {
+                continue;
+            };
             something_happened = true;
 
             desired_body.remove(&following);
@@ -51,7 +56,6 @@ pub fn match_loop_body(
 
     desired_body.is_empty()
 }
-
 
 /// Use heuristics to decide which blocks to move into the loop body.
 ///
@@ -78,7 +82,11 @@ pub fn heuristic_loop_body(
                 }
 
                 // Otherwise, move it into the loop
-                let bb = if let Some(bb) = follow_blocks.remove(&following) { bb } else { break; };
+                let bb = if let Some(bb) = follow_blocks.remove(&following) {
+                    bb
+                } else {
+                    break;
+                };
                 let succs = bb.successors();
 
                 body_blocks.insert(following, bb);
@@ -97,7 +105,7 @@ pub fn heuristic_loop_body(
 }
 
 /// These IDs identify groups of basic blocks corresponding to loops in a CFG.
-#[derive(Copy,Clone,PartialEq,Eq,PartialOrd,Ord,Debug,Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct LoopId(u64);
 
 impl LoopId {
@@ -112,7 +120,7 @@ impl LoopId {
 }
 
 /// Information about loops in a CFG.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct LoopInfo<Lbl: Hash + Eq> {
     /// Given a node, find the tightest enclosing loop
     node_loops: HashMap<Lbl, LoopId>,
@@ -123,14 +131,25 @@ pub struct LoopInfo<Lbl: Hash + Eq> {
 
 impl<Lbl: Hash + Eq + Clone> LoopInfo<Lbl> {
     pub fn new() -> Self {
-        LoopInfo { node_loops: HashMap::new(), loops: HashMap::new() }
+        LoopInfo {
+            node_loops: HashMap::new(),
+            loops: HashMap::new(),
+        }
     }
 
     /// Find the smallest possible loop that contains all of the items
-    pub fn tightest_common_loop<E: Iterator<Item=Lbl>>(&self, mut entries: E) -> Option<LoopId> {
-        let first = if let Some(f) = entries.next() { f } else { return None };
+    pub fn tightest_common_loop<E: Iterator<Item = Lbl>>(&self, mut entries: E) -> Option<LoopId> {
+        let first = if let Some(f) = entries.next() {
+            f
+        } else {
+            return None;
+        };
 
-        let mut loop_id = if let Some(i) = self.node_loops.get(&first) { *i } else { return None };
+        let mut loop_id = if let Some(i) = self.node_loops.get(&first) {
+            *i
+        } else {
+            return None;
+        };
 
         for entry in entries {
             // Widen the loop until it contains the `entry`, or it can no longer be widened.
@@ -139,7 +158,11 @@ impl<Lbl: Hash + Eq + Clone> LoopInfo<Lbl> {
                 if in_loop.contains(&entry) {
                     break;
                 }
-                loop_id = if let Some(i) = parent_id { i } else { return None };
+                loop_id = if let Some(i) = parent_id {
+                    i
+                } else {
+                    return None;
+                };
             }
         }
 
@@ -186,10 +209,10 @@ impl<Lbl: Hash + Eq + Clone> LoopInfo<Lbl> {
     }
 
     pub fn get_loop_contents<'a>(&'a self, id: LoopId) -> &'a HashSet<Lbl> {
-        &self.loops
+        &self
+            .loops
             .get(&id)
             .expect(&format!("There is no loop with id {:?}", id))
             .0
     }
-
 }

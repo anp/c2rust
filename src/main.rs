@@ -1,21 +1,20 @@
 #[macro_use]
 extern crate clap;
+extern crate c2rust;
 extern crate serde_cbor;
-extern crate ast_importer;
 
-use std::io::{Error, stdout};
-use std::io::prelude::*;
+use c2rust::c_ast::Printer;
+use c2rust::c_ast::*;
+use c2rust::clang_ast::process;
+use c2rust::clang_ast::AstContext;
+use c2rust::translator::{ReplaceMode, TranslationConfig};
+use clap::{App, Arg};
+use serde_cbor::{from_slice, Value};
 use std::fs::File;
-use ast_importer::clang_ast::process;
-use ast_importer::c_ast::*;
-use ast_importer::c_ast::Printer;
-use ast_importer::clang_ast::AstContext;
-use ast_importer::translator::{ReplaceMode,TranslationConfig};
-use clap::{Arg, App};
-use serde_cbor::{Value, from_slice};
+use std::io::prelude::*;
+use std::io::{stdout, Error};
 
 fn main() {
-
     let matches = App::new("AST Importer")
         .version("0.1.0")
         .author(crate_authors!())
@@ -134,28 +133,28 @@ fn main() {
 
     // Build a TranslationConfig from the command line
     let tcfg = TranslationConfig {
-        fail_on_error:          matches.is_present("fail-on-error"),
-        reloop_cfgs:            matches.is_present("reloop-cfgs"),
-        fail_on_multiple:       matches.is_present("fail-on-multiple"),
-        dump_function_cfgs:     matches.is_present("dump-function-cfgs"),
-        json_function_cfgs:     matches.is_present("json-function-cfgs"),
-        dump_cfg_liveness:      matches.is_present("dump-cfgs-liveness"),
-        dump_structures:        matches.is_present("dump-structures"),
-        debug_relooper_labels:  matches.is_present("debug-labels"),
-        cross_checks:           matches.is_present("cross-checks"),
-        cross_check_configs:    matches.values_of("cross-check-config")
+        fail_on_error: matches.is_present("fail-on-error"),
+        reloop_cfgs: matches.is_present("reloop-cfgs"),
+        fail_on_multiple: matches.is_present("fail-on-multiple"),
+        dump_function_cfgs: matches.is_present("dump-function-cfgs"),
+        json_function_cfgs: matches.is_present("json-function-cfgs"),
+        dump_cfg_liveness: matches.is_present("dump-cfgs-liveness"),
+        dump_structures: matches.is_present("dump-structures"),
+        debug_relooper_labels: matches.is_present("debug-labels"),
+        cross_checks: matches.is_present("cross-checks"),
+        cross_check_configs: matches
+            .values_of("cross-check-config")
             .map(|vals| vals.map(String::from).collect::<Vec<_>>())
             .unwrap_or_default(),
-        prefix_function_names:  matches.value_of("prefix-function-names")
-            .map(String::from),
-        translate_asm:          matches.is_present("translate-asm"),
-        translate_entry:        matches.is_present("translate-entry"),
-        translate_valist:       matches.is_present("translate-valist"),
-        use_c_loop_info:        !matches.is_present("ignore-c-loop-info"),
-        use_c_multiple_info:    !matches.is_present("ignore-c-multiple-info"),
-        simplify_structures:    !matches.is_present("no-simplify-structures"),
-        reduce_type_annotations:matches.is_present("reduce-type-annotations"),
-        emit_module:            matches.is_present("emit-module"),
+        prefix_function_names: matches.value_of("prefix-function-names").map(String::from),
+        translate_asm: matches.is_present("translate-asm"),
+        translate_entry: matches.is_present("translate-entry"),
+        translate_valist: matches.is_present("translate-valist"),
+        use_c_loop_info: !matches.is_present("ignore-c-loop-info"),
+        use_c_multiple_info: !matches.is_present("ignore-c-multiple-info"),
+        simplify_structures: !matches.is_present("no-simplify-structures"),
+        reduce_type_annotations: matches.is_present("reduce-type-annotations"),
+        emit_module: matches.is_present("emit-module"),
         panic_on_translator_failure: {
             match matches.value_of("invalid-code") {
                 Some("panic") => true,
@@ -198,19 +197,18 @@ fn main() {
         println!("{:#?}", Printer::new(stdout()).print(&typed_context));
     }
 
-
-//    use syn::parse;
-//    use quote::ToTokens;
-//    use quote::Tokens;
-//    if let parse::IResult::Done(_, t) = parse::ty("[u32; 10]") {
-//        let mut tokens = Tokens::new();
-//        t.to_tokens(&mut tokens);
-//        println!("{}", tokens.as_str());
-//    }
+    //    use syn::parse;
+    //    use quote::ToTokens;
+    //    use quote::Tokens;
+    //    if let parse::IResult::Done(_, t) = parse::ty("[u32; 10]") {
+    //        let mut tokens = Tokens::new();
+    //        t.to_tokens(&mut tokens);
+    //        println!("{}", tokens.as_str());
+    //    }
 
     // Perform the translation
 
-    println!("{}", ast_importer::translator::translate(typed_context, tcfg));
+    println!("{}", c2rust::translator::translate(typed_context, tcfg));
 }
 
 fn parse_untyped_ast(filename: &str) -> Result<AstContext, Error> {
@@ -225,5 +223,3 @@ fn parse_untyped_ast(filename: &str) -> Result<AstContext, Error> {
         Err(e) => panic!("{:#?}", e),
     }
 }
-
-

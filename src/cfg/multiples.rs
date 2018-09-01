@@ -48,29 +48,31 @@
 
 use super::*;
 
-
 /// Information about branching in a CFG.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct MultipleInfo<Lbl: Hash + Ord> {
     /// TODO: document me
     multiples: HashMap<
-        BTreeSet<Lbl>,                    // an entry set (a `BTreeSet` because it satisfies `Hash`)
+        BTreeSet<Lbl>, // an entry set (a `BTreeSet` because it satisfies `Hash`)
         (
-            Lbl,                          // label where the entries join back up
-            HashMap<Lbl, HashSet<Lbl>>,   // for each entry, what labels to expect until join label
+            Lbl,                        // label where the entries join back up
+            HashMap<Lbl, HashSet<Lbl>>, // for each entry, what labels to expect until join label
         ),
     >,
 }
 
 impl<Lbl: Hash + Ord + Clone> MultipleInfo<Lbl> {
     pub fn new() -> Self {
-        MultipleInfo { multiples: HashMap::new() }
+        MultipleInfo {
+            multiples: HashMap::new(),
+        }
     }
 
     /// Rewrite nodes to take into account a node remapping. Note that the remapping is usually
     /// going to be very much _not_ injective - the whole point of remapping is to merge some nodes.
     pub fn rewrite_blocks(&mut self, rewrites: &HashMap<Lbl, Lbl>) -> () {
-        self.multiples = self.multiples
+        self.multiples = self
+            .multiples
             .iter()
             .filter_map(|(entries, &(ref join_lbl, ref arms))| {
                 let entries: BTreeSet<Lbl> = entries
@@ -100,7 +102,7 @@ impl<Lbl: Hash + Ord + Clone> MultipleInfo<Lbl> {
 
     /// Add in information about a new multiple
     pub fn add_multiple(&mut self, join: Lbl, arms: Vec<(Lbl, HashSet<Lbl>)>) -> () {
-        let entry_set: BTreeSet<Lbl> = arms.iter().map(|&(ref l,_)| l.clone()).collect();
+        let entry_set: BTreeSet<Lbl> = arms.iter().map(|&(ref l, _)| l.clone()).collect();
         let arm_map: HashMap<Lbl, HashSet<Lbl>> = arms.into_iter().collect();
 
         if arm_map.len() > 1 {
@@ -109,9 +111,9 @@ impl<Lbl: Hash + Ord + Clone> MultipleInfo<Lbl> {
     }
 
     pub fn get_multiple<'a>(
-        &'a self, entries: &BTreeSet<Lbl>
+        &'a self,
+        entries: &BTreeSet<Lbl>,
     ) -> Option<&'a (Lbl, HashMap<Lbl, HashSet<Lbl>>)> {
         self.multiples.get(entries)
     }
 }
-

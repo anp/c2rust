@@ -31,3 +31,7 @@ tests/*_c
 tests/*_rust
 tests/*_c.txt
 tests/*_rust.txt
+
+/target
+**/*.rs.bk
+!/Cargo.lock

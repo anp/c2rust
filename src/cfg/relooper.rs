@@ -5,25 +5,41 @@ use super::*;
 
 /// Convert the CFG into a sequence of structures
 pub fn reloop(
-    cfg: Cfg<Label, StmtOrDecl>,  // the control flow graph to reloop
-    mut store: DeclStmtStore,     // store of what to do with declarations
-    simplify_structures: bool,    // simplify the output structure
-    use_c_loop_info: bool,        // use the loop information in the CFG (slower, but better)
-    use_c_multiple_info: bool,    // use the multiple information in the CFG (slower, but better)
+    cfg: Cfg<Label, StmtOrDecl>, // the control flow graph to reloop
+    mut store: DeclStmtStore,    // store of what to do with declarations
+    simplify_structures: bool,   // simplify the output structure
+    use_c_loop_info: bool,       // use the loop information in the CFG (slower, but better)
+    use_c_multiple_info: bool,   // use the multiple information in the CFG (slower, but better)
 ) -> (Vec<Stmt>, Vec<Structure<StmtOrComment>>) {
-
     let entries = cfg.entries;
-    let blocks = cfg.nodes
+    let blocks = cfg
+        .nodes
         .into_iter()
         .map(|(lbl, bb)| {
             let terminator = bb.terminator.map_labels(|l| StructureLabel::GoTo(*l));
-            (lbl, BasicBlock { body: bb.body, terminator, defined: bb.defined, live: bb.live })
+            (
+                lbl,
+                BasicBlock {
+                    body: bb.body,
+                    terminator,
+                    defined: bb.defined,
+                    live: bb.live,
+                },
+            )
         })
         .collect();
 
     let mut relooped_with_decls: Vec<Structure<StmtOrDecl>> = vec![];
-    let loop_info = if use_c_loop_info { Some(cfg.loops) } else { None };
-    let multiple_info = if use_c_multiple_info { Some(cfg.multiples) } else { None };
+    let loop_info = if use_c_loop_info {
+        Some(cfg.loops)
+    } else {
+        None
+    };
+    let multiple_info = if use_c_multiple_info {
+        Some(cfg.multiples)
+    } else {
+        None
+    };
     let mut state = RelooperState::new(loop_info, multiple_info);
     state.relooper(entries, blocks, &mut relooped_with_decls);
 
@@ -66,7 +82,6 @@ struct RelooperState {
 }
 
 impl RelooperState {
-
     pub fn new(
         loop_info: Option<LoopInfo<Label>>,
         multiple_info: Option<MultipleInfo<Label>>,
@@ -107,7 +122,6 @@ impl RelooperState {
 }
 
 impl RelooperState {
-
     /// Recursive helper for `reloop`.
     ///
     /// TODO: perhaps manually perform TCO?
@@ -119,7 +133,9 @@ impl RelooperState {
     ) {
         // Find nodes outside the graph pointed to from nodes inside the graph. Note that `ExitTo`
         // is not considered here - only `GoTo`.
-        fn out_edges<T>(blocks: &HashMap<Label, BasicBlock<StructureLabel<StmtOrDecl>, T>>) -> HashSet<Label> {
+        fn out_edges<T>(
+            blocks: &HashMap<Label, BasicBlock<StructureLabel<StmtOrDecl>, T>>,
+        ) -> HashSet<Label> {
             blocks
                 .iter()
                 .flat_map(|(_, bb)| bb.successors())
@@ -141,10 +157,8 @@ impl RelooperState {
         type StructuredBlocks = HashMap<Label, BasicBlock<StructureLabel<StmtOrDecl>, StmtOrDecl>>;
 
         // Find all labels reachable via a `GoTo` from the current set of blocks
-        let reachable_labels: HashSet<Label> = blocks
-            .iter()
-            .flat_map(|(_, bb)| bb.successors())
-            .collect();
+        let reachable_labels: HashSet<Label> =
+            blocks.iter().flat_map(|(_, bb)| bb.successors()).collect();
 
         // Split the entry labels into those that some basic block may goto versus those that none can
         // goto.
@@ -152,7 +166,6 @@ impl RelooperState {
             .iter()
             .cloned()
             .partition(|entry| reachable_labels.contains(&entry));
-
 
         // --------------------------------------
         // Base case
@@ -163,11 +176,19 @@ impl RelooperState {
         // --------------------------------------
         // Simple blocks
         if none_branch_to.len() == 1 && some_branch_to.is_empty() {
-            let entry = *none_branch_to.iter().next().expect("Should find exactly one entry");
+            let entry = *none_branch_to
+                .iter()
+                .next()
+                .expect("Should find exactly one entry");
 
             if let Some(bb) = blocks.remove(&entry) {
                 let new_entries = bb.successors();
-                let BasicBlock { body, terminator, live, defined } = bb;
+                let BasicBlock {
+                    body,
+                    terminator,
+                    live,
+                    defined,
+                } = bb;
 
                 // Flag declarations for everything that is live going in but not already in scope.
                 //
@@ -186,14 +207,22 @@ impl RelooperState {
                     self.add_to_scope(d);
                 }
 
-                result.push(Structure::Simple { entries, body, terminator });
+                result.push(Structure::Simple {
+                    entries,
+                    body,
+                    terminator,
+                });
 
                 self.relooper(new_entries, blocks, result);
             } else {
                 let body = vec![];
                 let terminator = Jump(StructureLabel::GoTo(entry));
 
-                result.push(Structure::Simple { entries, body, terminator });
+                result.push(Structure::Simple {
+                    entries,
+                    body,
+                    terminator,
+                });
             };
 
             return;
@@ -215,32 +244,36 @@ impl RelooperState {
                 let mut then = vec![];
                 self.relooper(present, blocks, &mut then);
 
-                result.push(Structure::Multiple { entries, branches, then })
+                result.push(Structure::Multiple {
+                    entries,
+                    branches,
+                    then,
+                })
             };
 
             return;
         }
 
-
         // --------------------------------------
         // Loops
 
-
         // DFS transitive closure
-        fn transitive_closure<V: Copy + Hash + Eq>(adjacency_list: &HashMap<V, HashSet<V>>) -> HashMap<V, HashSet<V>> {
+        fn transitive_closure<V: Copy + Hash + Eq>(
+            adjacency_list: &HashMap<V, HashSet<V>>,
+        ) -> HashMap<V, HashSet<V>> {
             let mut edges: HashSet<(V, V)> = HashSet::new();
-            let mut to_visit: Vec<(V, V)> = adjacency_list.keys().map(|v| (*v,*v)).collect();
+            let mut to_visit: Vec<(V, V)> = adjacency_list.keys().map(|v| (*v, *v)).collect();
 
-            while let Some((s,v)) = to_visit.pop() {
+            while let Some((s, v)) = to_visit.pop() {
                 for i in adjacency_list.get(&v).unwrap_or(&HashSet::new()) {
-                    if edges.insert((s,*i)) {
+                    if edges.insert((s, *i)) {
                         to_visit.push((s, *i));
                     }
                 }
             }
 
             let mut closure: HashMap<V, HashSet<V>> = HashMap::new();
-            for (f,t) in edges {
+            for (f, t) in edges {
                 closure.entry(f).or_insert(HashSet::new()).insert(t);
             }
 
@@ -260,12 +293,10 @@ impl RelooperState {
             (predecessor_map, strict_reachable_from)
         };
 
-
         // Try to match an existing branch point (from the intial C). See `MultipleInfo` for more
         // information on this.
         let mut recognized_c_multiple = false;
         if let Some(ref multiple_info) = self.multiple_info {
-
             let entries_key = entries.iter().cloned().collect();
             if let Some(&(join, ref arms)) = multiple_info.get_multiple(&entries_key) {
                 recognized_c_multiple = true;
@@ -281,7 +312,6 @@ impl RelooperState {
                         }
 
                         if let Some(bb) = blocks.get(&lbl) {
-
                             // If this isn't something we are supposed to encounter, break and fail.
                             if !content.contains(&lbl) {
                                 recognized_c_multiple = false;
@@ -301,7 +331,6 @@ impl RelooperState {
             }
         }
 
-
         if none_branch_to.is_empty() && !recognized_c_multiple {
             let new_returns: HashSet<Label> = strict_reachable_from
                 .iter()
@@ -311,20 +340,22 @@ impl RelooperState {
                 .collect();
 
             // Partition blocks into those belonging in or after the loop
-            let (mut body_blocks, mut follow_blocks): (StructuredBlocks, StructuredBlocks) = blocks
+            let (mut body_blocks, mut follow_blocks): (
+                StructuredBlocks,
+                StructuredBlocks,
+            ) = blocks
                 .into_iter()
                 .partition(|&(ref lbl, _)| new_returns.contains(lbl) || entries.contains(lbl));
             let mut follow_entries = out_edges(&body_blocks);
-
 
             // Try to match an existing loop (from the initial C)
             let mut matched_existing_loop = false;
             if let Some(ref loop_info) = self.loop_info {
                 let must_be_in_loop = entries.iter().chain(new_returns.iter()).cloned();
                 if let Some(loop_id) = loop_info.tightest_common_loop(must_be_in_loop) {
-
                     // Construct the target group of labels
-                    let mut desired_body: HashSet<Label> = loop_info.get_loop_contents(loop_id).clone();
+                    let mut desired_body: HashSet<Label> =
+                        loop_info.get_loop_contents(loop_id).clone();
                     desired_body.retain(|l| !entries.contains(l));
                     desired_body.retain(|l| !new_returns.contains(l));
 
@@ -380,22 +411,25 @@ impl RelooperState {
             return;
         }
 
-
         // --------------------------------------
         // Multiple
 
         // Like `strict_reachable_from`, but entries also reach themselves
         let mut reachable_from: HashMap<Label, HashSet<Label>> = strict_reachable_from;
         for entry in &entries {
-            reachable_from.entry(*entry).or_insert(HashSet::new()).insert(*entry);
+            reachable_from
+                .entry(*entry)
+                .or_insert(HashSet::new())
+                .insert(*entry);
         }
 
         // Blocks that are reached by only one label
-        let singly_reached: HashMap<Label, HashSet<Label>> = flip_edges(reachable_from
-            .into_iter()
-            .map(|(lbl, reachable)| (lbl, &reachable & &entries))
-            .filter(|&(_, ref reachable)| reachable.len() == 1)
-            .collect()
+        let singly_reached: HashMap<Label, HashSet<Label>> = flip_edges(
+            reachable_from
+                .into_iter()
+                .map(|(lbl, reachable)| (lbl, &reachable & &entries))
+                .filter(|&(_, ref reachable)| reachable.len() == 1)
+                .collect(),
         );
 
         let handled_entries: HashMap<Label, StructuredBlocks> = singly_reached
@@ -454,7 +488,11 @@ impl RelooperState {
             (vec![], all_handlers)
         };
 
-        result.push(Structure::Multiple { entries, branches, then });
+        result.push(Structure::Multiple {
+            entries,
+            branches,
+            then,
+        });
         self.relooper(follow_entries, follow_blocks, result);
 
         return;
@@ -463,7 +501,6 @@ impl RelooperState {
 
 /// Nested precondition: `structures` will contain no `StructureLabel::Nested` terminators.
 fn simplify_structure<Stmt: Clone>(structures: Vec<Structure<Stmt>>) -> Vec<Structure<Stmt>> {
-
     // Recursive calls come first
     let structures: Vec<Structure<Stmt>> = structures
         .into_iter()
@@ -472,17 +509,24 @@ fn simplify_structure<Stmt: Clone>(structures: Vec<Structure<Stmt>>) -> Vec<Stru
                 Structure::Loop { entries, body } => {
                     let body = simplify_structure(body);
                     Structure::Loop { entries, body }
-                },
-                Structure::Multiple { entries, branches, then } => {
+                }
+                Structure::Multiple {
+                    entries,
+                    branches,
+                    then,
+                } => {
                     let branches = branches
                         .into_iter()
                         .map(|(lbl, ss)| (lbl, simplify_structure(ss)))
                         .collect();
                     let then = simplify_structure(then);
-                    Structure::Multiple { entries, branches, then }
+                    Structure::Multiple {
+                        entries,
+                        branches,
+                        then,
+                    }
                 }
                 simple => simple,
-
             }
         })
         .collect();
@@ -491,21 +535,33 @@ fn simplify_structure<Stmt: Clone>(structures: Vec<Structure<Stmt>>) -> Vec<Stru
 
     for structure in structures.iter().rev() {
         match structure {
-            &Structure::Simple { ref entries, ref body, ref terminator } => {
-
+            &Structure::Simple {
+                ref entries,
+                ref body,
+                ref terminator,
+            } => {
                 // Here, we ensure that all labels in a terminator are mentioned only once in the
                 // terminator.
-                let terminator: GenTerminator<StructureLabel<Stmt>> = if let &Switch { ref expr, ref cases } = terminator {
-
+                let terminator: GenTerminator<StructureLabel<Stmt>> = if let &Switch {
+                    ref expr,
+                    ref cases,
+                } = terminator
+                {
                     // Here, we group patterns by the label they go to.
                     let mut merged_goto: HashMap<Label, Vec<P<Pat>>> = HashMap::new();
                     let mut merged_exit: HashMap<Label, Vec<P<Pat>>> = HashMap::new();
 
                     for &(ref pats, ref lbl) in cases {
                         match lbl {
-                            &StructureLabel::GoTo(lbl) => merged_goto.entry(lbl).or_insert(vec![]).extend(pats.clone()),
-                            &StructureLabel::ExitTo(lbl) => merged_exit.entry(lbl).or_insert(vec![]).extend(pats.clone()),
-                            _ => panic!("simplify_structure: Nested precondition violated")
+                            &StructureLabel::GoTo(lbl) => merged_goto
+                                .entry(lbl)
+                                .or_insert(vec![])
+                                .extend(pats.clone()),
+                            &StructureLabel::ExitTo(lbl) => merged_exit
+                                .entry(lbl)
+                                .or_insert(vec![])
+                                .extend(pats.clone()),
+                            _ => panic!("simplify_structure: Nested precondition violated"),
                         }
                     }
 
@@ -515,51 +571,64 @@ fn simplify_structure<Stmt: Clone>(structures: Vec<Structure<Stmt>>) -> Vec<Stru
                     let mut cases_new: Vec<_> = vec![];
                     for &(_, ref lbl) in cases.iter().rev() {
                         match lbl {
-                            &StructureLabel::GoTo(lbl) =>
-                                match merged_goto.remove(&lbl) {
-                                    None => { },
-                                    Some(pats) => cases_new.push((pats, StructureLabel::GoTo(lbl))),
-                                }
-                            &StructureLabel::ExitTo(lbl) =>
-                                match merged_exit.remove(&lbl) {
-                                    None => { },
-                                    Some(pats) => cases_new.push((pats, StructureLabel::ExitTo(lbl))),
-                                }
-                            _ => panic!("simplify_structure: Nested precondition violated")
+                            &StructureLabel::GoTo(lbl) => match merged_goto.remove(&lbl) {
+                                None => {}
+                                Some(pats) => cases_new.push((pats, StructureLabel::GoTo(lbl))),
+                            },
+                            &StructureLabel::ExitTo(lbl) => match merged_exit.remove(&lbl) {
+                                None => {}
+                                Some(pats) => cases_new.push((pats, StructureLabel::ExitTo(lbl))),
+                            },
+                            _ => panic!("simplify_structure: Nested precondition violated"),
                         };
                     }
                     cases_new.reverse();
 
-                    Switch { expr: expr.clone(), cases: cases_new }
+                    Switch {
+                        expr: expr.clone(),
+                        cases: cases_new,
+                    }
                 } else {
                     terminator.clone()
                 };
 
                 match acc_structures.pop() {
-                    Some(Structure::Multiple { entries: _, ref branches, ref then }) => {
-                        let rewrite = |t: &StructureLabel<Stmt>| {
-                            match t {
-                                &StructureLabel::GoTo(ref to) => {
-                                    let entries: HashSet<_> = vec![*to].into_iter().collect();
-                                    let body: Vec<Stmt> = vec![];
-                                    let terminator = Jump(StructureLabel::GoTo(*to));
-                                    let first_structure = Structure::Simple { entries, body, terminator };
+                    Some(Structure::Multiple {
+                        entries: _,
+                        ref branches,
+                        ref then,
+                    }) => {
+                        let rewrite = |t: &StructureLabel<Stmt>| match t {
+                            &StructureLabel::GoTo(ref to) => {
+                                let entries: HashSet<_> = vec![*to].into_iter().collect();
+                                let body: Vec<Stmt> = vec![];
+                                let terminator = Jump(StructureLabel::GoTo(*to));
+                                let first_structure = Structure::Simple {
+                                    entries,
+                                    body,
+                                    terminator,
+                                };
 
-                                    let mut nested: Vec<Structure<Stmt>> = vec![first_structure];
-                                    nested.extend(branches.get(to).cloned().unwrap_or(then.clone()));
+                                let mut nested: Vec<
+                                    Structure<Stmt>,
+                                > = vec![first_structure];
+                                nested.extend(branches.get(to).cloned().unwrap_or(then.clone()));
 
-                                    StructureLabel::Nested(nested)
-                                }
-                                &StructureLabel::ExitTo(ref to) => StructureLabel::ExitTo(*to),
-                                _ => panic!("simplify_structure: Nested precondition violated")
+                                StructureLabel::Nested(nested)
                             }
+                            &StructureLabel::ExitTo(ref to) => StructureLabel::ExitTo(*to),
+                            _ => panic!("simplify_structure: Nested precondition violated"),
                         };
 
                         let terminator = terminator.map_labels(rewrite);
                         let body = body.clone();
                         let entries = entries.clone();
-                        acc_structures.push(Structure::Simple { entries, body, terminator });
-                    },
+                        acc_structures.push(Structure::Simple {
+                            entries,
+                            body,
+                            terminator,
+                        });
+                    }
                     possibly_popped => {
                         if let Some(popped) = possibly_popped {
                             acc_structures.push(popped);
@@ -568,14 +637,17 @@ fn simplify_structure<Stmt: Clone>(structures: Vec<Structure<Stmt>>) -> Vec<Stru
                         let entries = entries.clone();
                         let body = body.clone();
                         let terminator = terminator.clone();
-                        acc_structures.push(Structure::Simple { entries, body, terminator });
+                        acc_structures.push(Structure::Simple {
+                            entries,
+                            body,
+                            terminator,
+                        });
                     }
                 }
             }
 
             other_structure => acc_structures.push(other_structure.clone()),
         }
-
     }
 
     acc_structures.reverse();

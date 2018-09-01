@@ -1,5 +1,4 @@
-
-use std::cell::{Cell, RefCell, Ref, RefMut};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 
 pub enum LoopType {
     For,
@@ -27,15 +26,13 @@ impl Loop {
     }
 
     pub fn get_or_create_label(&mut self, ctx: &LoopContext) -> &str {
-        self.label.get_or_insert_with(|| {
-            format!("'loop{}", ctx.loop_index.get())
-        })
+        self.label
+            .get_or_insert_with(|| format!("'loop{}", ctx.loop_index.get()))
     }
 
     pub fn get_or_create_body_label(&mut self, ctx: &LoopContext) -> &str {
-        self.body_label.get_or_insert_with(|| {
-            format!("'body{}", ctx.body_index.get())
-        })
+        self.body_label
+            .get_or_insert_with(|| format!("'body{}", ctx.body_index.get()))
     }
 }
 
@@ -79,14 +76,21 @@ impl LoopContext {
 
     /// Pop the current loop off the stack and return it
     pub fn pop_loop(&self) -> Loop {
-        self.loops.borrow_mut().pop().expect("Expected valid loop to pop()")
+        self.loops
+            .borrow_mut()
+            .pop()
+            .expect("Expected valid loop to pop()")
     }
 
     pub fn current_loop(&self) -> Ref<Loop> {
-        Ref::map(self.loops.borrow(), |l| l.last().expect("Expected valid loop"))
+        Ref::map(self.loops.borrow(), |l| {
+            l.last().expect("Expected valid loop")
+        })
     }
 
     pub fn current_loop_mut(&self) -> RefMut<Loop> {
-        RefMut::map(self.loops.borrow_mut(), |l| l.last_mut().expect("Expected valid loop"))
+        RefMut::map(self.loops.borrow_mut(), |l| {
+            l.last_mut().expect("Expected valid loop")
+        })
     }
 }

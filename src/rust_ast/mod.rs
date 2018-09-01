@@ -1,14 +1,14 @@
 //! Helpers for building AST nodes.  Normally used by calling `mk().some_node(args...)`.
-use syntax::ast::*;
-use syntax_pos::symbol::Symbol;
-use syntax::codemap::{DUMMY_SP, dummy_spanned, Span};
-use syntax::parse::token::{self, Token, DelimToken};
-use syntax::attr::{mk_attr_inner};
-use syntax::ptr::P;
-use syntax::tokenstream::{TokenTree, TokenStream, TokenStreamBuilder, ThinTokenStream};
-use syntax::symbol::keywords;
-use std::rc::Rc;
 use rustc_target::spec::abi::{lookup, Abi};
+use std::rc::Rc;
+use syntax::ast::*;
+use syntax::attr::mk_attr_inner;
+use syntax::codemap::{dummy_spanned, Span, DUMMY_SP};
+use syntax::parse::token::{self, DelimToken, Token};
+use syntax::ptr::P;
+use syntax::symbol::keywords;
+use syntax::tokenstream::{ThinTokenStream, TokenStream, TokenStreamBuilder, TokenTree};
+use syntax_pos::symbol::Symbol;
 
 pub mod comment_store;
 pub mod traverse;
@@ -58,7 +58,6 @@ impl<'a, T: Clone> Make<T> for &'a T {
     }
 }
 
-
 impl<S: IntoSymbol> Make<Ident> for S {
     fn make(self, _mk: &Builder) -> Ident {
         Ident::with_empty_ctxt(self.into_symbol())
@@ -67,10 +66,11 @@ impl<S: IntoSymbol> Make<Ident> for S {
 
 impl<L: Make<Ident>> Make<Label> for L {
     fn make(self, mk: &Builder) -> Label {
-        Label { ident: self.make(mk) }
+        Label {
+            ident: self.make(mk),
+        }
     }
 }
-
 
 impl<'a> Make<Visibility> for &'a str {
     fn make(self, _mk: &Builder) -> Visibility {
@@ -177,7 +177,6 @@ impl<'a> Make<LitIntType> for UintTy {
     }
 }
 
-
 impl<I: Make<Ident>> Make<PathSegment> for I {
     fn make(self, mk: &Builder) -> PathSegment {
         PathSegment {
@@ -187,7 +186,6 @@ impl<I: Make<Ident>> Make<PathSegment> for I {
     }
 }
 
-
 impl<S: Make<PathSegment>> Make<Path> for Vec<S> {
     fn make(self, mk: &Builder) -> Path {
         Path {
@@ -196,7 +194,6 @@ impl<S: Make<PathSegment>> Make<Path> for Vec<S> {
         }
     }
 }
-
 
 impl Make<ThinTokenStream> for TokenStream {
     fn make(self, _mk: &Builder) -> ThinTokenStream {
@@ -276,15 +273,11 @@ impl Builder {
         }
     }
 
-
     // Modifier updates.
 
     pub fn vis<V: Make<Visibility>>(self, vis: V) -> Self {
         let vis = vis.make(&self);
-        Builder {
-            vis: vis,
-            ..self
-        }
+        Builder { vis: vis, ..self }
     }
 
     pub fn pub_(self) -> Self {
@@ -329,23 +322,19 @@ impl Builder {
 
     pub fn abi<A: Make<Abi>>(self, abi: A) -> Self {
         let abi = abi.make(&self);
-        Builder {
-            abi: abi,
-            ..self
-        }
+        Builder { abi: abi, ..self }
     }
 
     pub fn span<S: Make<Span>>(self, span: S) -> Self {
         let span = span.make(&self);
-        Builder {
-            span: span,
-            ..self
-        }
+        Builder { span: span, ..self }
     }
 
-
     pub fn str_attr<K, V>(self, key: K, value: V) -> Self
-        where K: Make<PathSegment>, V: IntoSymbol {
+    where
+        K: Make<PathSegment>,
+        V: IntoSymbol,
+    {
         let key = vec![key].make(&self);
 
         let mut attrs = self.attrs;
@@ -356,7 +345,8 @@ impl Builder {
             tokens: vec![
                 Token::Eq,
                 Token::Literal(token::Lit::Str_(value.into_symbol()), None),
-            ].into_iter().collect(),
+            ].into_iter()
+                .collect(),
             is_sugared_doc: false,
             span: DUMMY_SP,
         });
@@ -367,7 +357,9 @@ impl Builder {
     }
 
     pub fn single_attr<K>(self, key: K) -> Self
-        where K: Make<PathSegment> {
+    where
+        K: Make<PathSegment>,
+    {
         let key: Path = vec![key].make(&self);
 
         let mut attrs = self.attrs;
@@ -385,9 +377,11 @@ impl Builder {
         }
     }
 
-    pub fn call_attr<K,V>(self, func: K, arguments: Vec<V>) -> Self
-        where K: Make<PathSegment>, V: Make<Ident> {
-
+    pub fn call_attr<K, V>(self, func: K, arguments: Vec<V>) -> Self
+    where
+        K: Make<PathSegment>,
+        V: Make<Ident>,
+    {
         let func: Path = vec![func].make(&self);
 
         let tokens: TokenStream = {
@@ -427,8 +421,11 @@ impl Builder {
 
     // Path segments with parameters
 
-    pub fn path_segment_with_params<I,P>(self, identifier: I, parameters: P) -> PathSegment
-        where I: Make<Ident>, P: Make<PathParameters> {
+    pub fn path_segment_with_params<I, P>(self, identifier: I, parameters: P) -> PathSegment
+    where
+        I: Make<Ident>,
+        P: Make<PathParameters>,
+    {
         let identifier = identifier.make(&self);
         let parameters = parameters.make(&self);
         PathSegment {
@@ -438,8 +435,9 @@ impl Builder {
     }
 
     pub fn parenthesized_param_types<Ps>(self, params: Ps) -> ParenthesizedParameterData
-        where Ps: Make<Vec<P<Ty>>> {
-
+    where
+        Ps: Make<Vec<P<Ty>>>,
+    {
         let params = params.make(&self);
         ParenthesizedParameterData {
             span: DUMMY_SP,
@@ -449,8 +447,9 @@ impl Builder {
     }
 
     pub fn angle_bracketed_param_types<Ps>(self, params: Ps) -> AngleBracketedParameterData
-        where Ps: Make<Vec<P<Ty>>> {
-
+    where
+        Ps: Make<Vec<P<Ty>>>,
+    {
         let params = params.make(&self);
         AngleBracketedParameterData {
             span: DUMMY_SP,
@@ -463,22 +462,30 @@ impl Builder {
     // Simple nodes
 
     pub fn ident<I>(self, name: I) -> Ident
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         name.make(&self)
     }
 
     pub fn path_segment<S>(self, seg: S) -> PathSegment
-        where S: Make<PathSegment> {
+    where
+        S: Make<PathSegment>,
+    {
         seg.make(&self)
     }
 
     pub fn path<Pa>(self, path: Pa) -> Path
-        where Pa: Make<Path> {
+    where
+        Pa: Make<Path>,
+    {
         path.make(&self)
     }
 
     pub fn anon_const<E>(self, expr: E) -> AnonConst
-        where E: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+    {
         AnonConst {
             id: DUMMY_NODE_ID,
             value: expr.make(&self),
@@ -490,7 +497,9 @@ impl Builder {
     // variant-specific details following each variant.
 
     pub fn array_expr<A>(self, args: Vec<A>) -> P<Expr>
-        where A: Make<P<Expr>> {
+    where
+        A: Make<P<Expr>>,
+    {
         let args = args.into_iter().map(|a| a.make(&self)).collect();
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -501,7 +510,10 @@ impl Builder {
     }
 
     pub fn call_expr<F, A>(self, func: F, args: Vec<A>) -> P<Expr>
-        where F: Make<P<Expr>>, A: Make<P<Expr>> {
+    where
+        F: Make<P<Expr>>,
+        A: Make<P<Expr>>,
+    {
         let func = func.make(&self);
         let args = args.into_iter().map(|a| a.make(&self)).collect();
         P(Expr {
@@ -513,7 +525,11 @@ impl Builder {
     }
 
     pub fn method_call_expr<E, S, A>(self, expr: E, seg: S, args: Vec<A>) -> P<Expr>
-        where E: Make<P<Expr>>, S: Make<PathSegment>, A: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+        S: Make<PathSegment>,
+        A: Make<P<Expr>>,
+    {
         let expr = expr.make(&self);
         let seg = seg.make(&self);
 
@@ -531,7 +547,10 @@ impl Builder {
         })
     }
 
-    pub fn tuple_expr<E>(self, exprs: Vec<E>) -> P<Expr> where E: Make<P<Expr>> {
+    pub fn tuple_expr<E>(self, exprs: Vec<E>) -> P<Expr>
+    where
+        E: Make<P<Expr>>,
+    {
         let exprs: Vec<P<Expr>> = exprs.into_iter().map(|x| x.make(&self)).collect();
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -542,14 +561,18 @@ impl Builder {
     }
 
     pub fn binary_expr<O, E>(self, op: O, lhs: E, rhs: E) -> P<Expr>
-        where O: Make<BinOpKind>, E: Make<P<Expr>> {
+    where
+        O: Make<BinOpKind>,
+        E: Make<P<Expr>>,
+    {
         let op = op.make(&self);
         let mut lhs = lhs.make(&self);
         let rhs = rhs.make(&self);
 
         match op {
-            BinOpKind::Lt | BinOpKind::Shl if has_rightmost_cast(&*lhs) =>
-            lhs = mk().paren_expr(lhs),
+            BinOpKind::Lt | BinOpKind::Shl if has_rightmost_cast(&*lhs) => {
+                lhs = mk().paren_expr(lhs)
+            }
             _ => {}
         }
 
@@ -562,7 +585,10 @@ impl Builder {
     }
 
     pub fn unary_expr<O, E>(self, op: O, a: E) -> P<Expr>
-        where O: Make<UnOp>, E: Make<P<Expr>> {
+    where
+        O: Make<UnOp>,
+        E: Make<P<Expr>>,
+    {
         let op = op.make(&self);
         let a = a.make(&self);
         P(Expr {
@@ -574,7 +600,9 @@ impl Builder {
     }
 
     pub fn lit_expr<L>(self, lit: L) -> P<Expr>
-        where L: Make<P<Lit>> {
+    where
+        L: Make<P<Lit>>,
+    {
         let lit = lit.make(&self);
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -585,13 +613,22 @@ impl Builder {
     }
 
     pub fn cast_expr<E, T>(self, e: E, t: T) -> P<Expr>
-        where E: Make<P<Expr>>, T: Make<P<Ty>> {
+    where
+        E: Make<P<Expr>>,
+        T: Make<P<Ty>>,
+    {
         let mut e = e.make(&self);
         let t = t.make(&self);
 
         // Workaround for a bug in libsyntax require us to emit extra parentheses
-        let cast_if = if let ExprKind::If(..) = e.node { true } else { false };
-        if cast_if { e = mk().paren_expr(e); }
+        let cast_if = if let ExprKind::If(..) = e.node {
+            true
+        } else {
+            false
+        };
+        if cast_if {
+            e = mk().paren_expr(e);
+        }
 
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -602,7 +639,10 @@ impl Builder {
     }
 
     pub fn type_expr<E, T>(self, e: E, t: T) -> P<Expr>
-        where E: Make<P<Expr>>, T: Make<P<Ty>> {
+    where
+        E: Make<P<Expr>>,
+        T: Make<P<Ty>>,
+    {
         let e = e.make(&self);
         let t = t.make(&self);
         P(Expr {
@@ -614,7 +654,9 @@ impl Builder {
     }
 
     pub fn block_expr<B>(self, blk: B) -> P<Expr>
-        where B: Make<P<Block>> {
+    where
+        B: Make<P<Block>>,
+    {
         let blk = blk.make(&self);
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -625,7 +667,10 @@ impl Builder {
     }
 
     pub fn assign_expr<E1, E2>(self, lhs: E1, rhs: E2) -> P<Expr>
-        where E1: Make<P<Expr>>, E2: Make<P<Expr>> {
+    where
+        E1: Make<P<Expr>>,
+        E2: Make<P<Expr>>,
+    {
         let lhs = lhs.make(&self);
         let rhs = rhs.make(&self);
         P(Expr {
@@ -637,7 +682,11 @@ impl Builder {
     }
 
     pub fn assign_op_expr<O, E1, E2>(self, op: O, lhs: E1, rhs: E2) -> P<Expr>
-        where O: Make<BinOpKind>, E1: Make<P<Expr>>, E2: Make<P<Expr>> {
+    where
+        O: Make<BinOpKind>,
+        E1: Make<P<Expr>>,
+        E2: Make<P<Expr>>,
+    {
         let op = dummy_spanned(op.make(&self));
         let lhs = lhs.make(&self);
         let rhs = rhs.make(&self);
@@ -650,7 +699,10 @@ impl Builder {
     }
 
     pub fn index_expr<E1, E2>(self, lhs: E1, rhs: E2) -> P<Expr>
-        where E1: Make<P<Expr>>, E2: Make<P<Expr>> {
+    where
+        E1: Make<P<Expr>>,
+        E2: Make<P<Expr>>,
+    {
         let lhs = lhs.make(&self);
         let rhs = rhs.make(&self);
         P(Expr {
@@ -662,12 +714,16 @@ impl Builder {
     }
 
     pub fn path_expr<Pa>(self, path: Pa) -> P<Expr>
-        where Pa: Make<Path> {
+    where
+        Pa: Make<Path>,
+    {
         self.qpath_expr(None, path)
     }
 
     pub fn qpath_expr<Pa>(self, qself: Option<QSelf>, path: Pa) -> P<Expr>
-        where Pa: Make<Path> {
+    where
+        Pa: Make<Path>,
+    {
         let path = path.make(&self);
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -680,7 +736,10 @@ impl Builder {
     /// An array literal constructed from one repeated element.
     /// `[expr; n]`
     pub fn repeat_expr<E, N>(self, expr: E, n: N) -> P<Expr>
-        where E: Make<P<Expr>>, N: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+        N: Make<P<Expr>>,
+    {
         let expr = expr.make(&self);
         let n = mk().anon_const(n.make(&self));
         P(Expr {
@@ -692,7 +751,9 @@ impl Builder {
     }
 
     pub fn paren_expr<E>(self, e: E) -> P<Expr>
-        where E: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+    {
         let e = e.make(&self);
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -704,12 +765,16 @@ impl Builder {
 
     // Special case of path_expr
     pub fn ident_expr<I>(self, name: I) -> P<Expr>
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         self.path_expr(vec![name])
     }
 
     pub fn addr_of_expr<E>(self, e: E) -> P<Expr>
-        where E: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+    {
         let e = e.make(&self);
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -720,7 +785,9 @@ impl Builder {
     }
 
     pub fn mac_expr<M>(self, mac: M) -> P<Expr>
-        where M: Make<Mac> {
+    where
+        M: Make<Mac>,
+    {
         let mut mac = mac.make(&self);
         mac.node.delim = MacDelimiter::Parenthesis;
         P(Expr {
@@ -732,7 +799,9 @@ impl Builder {
     }
 
     pub fn struct_expr<Pa>(self, path: Pa, fields: Vec<Field>) -> P<Expr>
-        where Pa: Make<Path> {
+    where
+        Pa: Make<Path>,
+    {
         let path = path.make(&self);
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -744,7 +813,10 @@ impl Builder {
 
     // struct_expr, but with optional base expression
     pub fn struct_expr_base<Pa, E>(self, path: Pa, fields: Vec<Field>, base: Option<E>) -> P<Expr>
-        where Pa: Make<Path>, E: Make<P<Expr>> {
+    where
+        Pa: Make<Path>,
+        E: Make<P<Expr>>,
+    {
         let path = path.make(&self);
         let base = base.map(|e| e.make(&self));
         P(Expr {
@@ -756,7 +828,10 @@ impl Builder {
     }
 
     pub fn field_expr<E, F>(self, val: E, field: F) -> P<Expr>
-        where E: Make<P<Expr>>, F: Make<Ident> {
+    where
+        E: Make<P<Expr>>,
+        F: Make<Ident>,
+    {
         let val = val.make(&self);
         let field = field.make(&self);
         P(Expr {
@@ -767,9 +842,11 @@ impl Builder {
         })
     }
 
-
     pub fn field<I, E>(self, ident: I, expr: E) -> Field
-        where I: Make<Ident>, E: Make<P<Expr>> {
+    where
+        I: Make<Ident>,
+        E: Make<P<Expr>>,
+    {
         let ident = ident.make(&self);
         let expr = expr.make(&self);
         Field {
@@ -782,7 +859,9 @@ impl Builder {
     }
 
     pub fn match_expr<E>(self, cond: E, arms: Vec<Arm>) -> P<Expr>
-        where E: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+    {
         let cond = cond.make(&self);
         let arms = arms.into_iter().map(|arm| arm.make(&self)).collect();
         P(Expr {
@@ -794,7 +873,10 @@ impl Builder {
     }
 
     pub fn arm<Pa, E>(self, pats: Vec<Pa>, guard: Option<E>, body: E) -> Arm
-        where E: Make<P<Expr>>, Pa: Make<P<Pat>> {
+    where
+        E: Make<P<Expr>>,
+        Pa: Make<P<Pat>>,
+    {
         let pats = pats.into_iter().map(|pat| pat.make(&self)).collect();
         let guard = guard.map(|g| g.make(&self));
         let body = body.make(&self);
@@ -804,9 +886,7 @@ impl Builder {
             guard,
             body,
         }
-
     }
-
 
     // Literals
 
@@ -818,7 +898,9 @@ impl Builder {
     }
 
     pub fn str_lit<S>(self, s: S) -> P<Lit>
-        where S: IntoSymbol {
+    where
+        S: IntoSymbol,
+    {
         let s = s.into_symbol();
         P(Lit {
             node: LitKind::Str(s, StrStyle::Cooked),
@@ -841,7 +923,9 @@ impl Builder {
     }
 
     pub fn int_lit<T>(self, i: u128, ty: T) -> P<Lit>
-        where T: Make<LitIntType> {
+    where
+        T: Make<LitIntType>,
+    {
         let ty = ty.make(&self);
         P(Lit {
             node: LitKind::Int(i, ty),
@@ -850,7 +934,10 @@ impl Builder {
     }
 
     pub fn float_lit<S, T>(self, s: S, ty: T) -> P<Lit>
-        where S: IntoSymbol, T: Make<FloatTy> {
+    where
+        S: IntoSymbol,
+        T: Make<FloatTy>,
+    {
         let s = s.into_symbol();
         let ty = ty.make(&self);
         P(Lit {
@@ -860,7 +947,9 @@ impl Builder {
     }
 
     pub fn float_unsuffixed_lit<S>(self, s: S) -> P<Lit>
-        where S: IntoSymbol {
+    where
+        S: IntoSymbol,
+    {
         let s = s.into_symbol();
         P(Lit {
             node: LitKind::FloatUnsuffixed(s),
@@ -876,21 +965,23 @@ impl Builder {
     }
 
     pub fn ifte_expr<C, T, E>(self, cond: C, then_case: T, else_case: Option<E>) -> P<Expr>
-        where C: Make<P<Expr>>, T: Make<P<Block>>, E: Make<P<Expr>> {
+    where
+        C: Make<P<Expr>>,
+        T: Make<P<Block>>,
+        E: Make<P<Expr>>,
+    {
         let cond = cond.make(&self);
         let then_case = then_case.make(&self);
-        let else_case =
-            else_case.map(|x| {
+        let else_case = else_case.map(|x| {
+            let e = x.make(&self);
 
-                let e = x.make(&self);
-
-                // The else branch in libsyntax must be one of these three cases,
-                // otherwise we have to manually add the block around the else expression
-                match e.node {
-                    ExprKind::If{..} | ExprKind::IfLet{..} | ExprKind::Block{..} => e,
-                    _ => mk().block_expr(mk().block(vec![mk().expr_stmt(e)])),
-                }
-            });
+            // The else branch in libsyntax must be one of these three cases,
+            // otherwise we have to manually add the block around the else expression
+            match e.node {
+                ExprKind::If { .. } | ExprKind::IfLet { .. } | ExprKind::Block { .. } => e,
+                _ => mk().block_expr(mk().block(vec![mk().expr_stmt(e)])),
+            }
+        });
 
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -901,7 +992,11 @@ impl Builder {
     }
 
     pub fn while_expr<C, B, L>(self, cond: C, body: B, label: Option<L>) -> P<Expr>
-        where C: Make<P<Expr>>, B: Make<P<Block>>, L: Make<Label> {
+    where
+        C: Make<P<Expr>>,
+        B: Make<P<Block>>,
+        L: Make<Label>,
+    {
         let cond = cond.make(&self);
         let body = body.make(&self);
         let label = label.map(|l| l.make(&self));
@@ -915,7 +1010,10 @@ impl Builder {
     }
 
     pub fn loop_expr<B, L>(self, body: B, label: Option<L>) -> P<Expr>
-        where B: Make<P<Block>>, L: Make<Label> {
+    where
+        B: Make<P<Block>>,
+        L: Make<Label>,
+    {
         let body = body.make(&self);
         let label = label.map(|l| l.make(&self));
 
@@ -928,7 +1026,12 @@ impl Builder {
     }
 
     pub fn for_expr<Pa, E, B, L>(self, pat: Pa, expr: E, body: B, label: Option<L>) -> P<Expr>
-        where Pa: Make<P<Pat>>, E: Make<P<Expr>>, B: Make<P<Block>>, L: Make<Label> {
+    where
+        Pa: Make<P<Pat>>,
+        E: Make<P<Expr>>,
+        B: Make<P<Block>>,
+        L: Make<Label>,
+    {
         let pat = pat.make(&self);
         let expr = expr.make(&self);
         let body = body.make(&self);
@@ -942,11 +1045,12 @@ impl Builder {
         })
     }
 
-
     // Patterns
 
     pub fn ident_pat<I>(self, name: I) -> P<Pat>
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let name = name.make(&self);
         P(Pat {
             id: DUMMY_NODE_ID,
@@ -955,7 +1059,10 @@ impl Builder {
         })
     }
 
-    pub fn tuple_pat<Pa>(self, pats: Vec<Pa>) -> P<Pat> where Pa: Make<P<Pat>> {
+    pub fn tuple_pat<Pa>(self, pats: Vec<Pa>) -> P<Pat>
+    where
+        Pa: Make<P<Pat>>,
+    {
         let pats: Vec<P<Pat>> = pats.into_iter().map(|x| x.make(&self)).collect();
         P(Pat {
             id: DUMMY_NODE_ID,
@@ -965,7 +1072,9 @@ impl Builder {
     }
 
     pub fn qpath_pat<Pa>(self, qself: Option<QSelf>, path: Pa) -> P<Pat>
-        where Pa: Make<Path> {
+    where
+        Pa: Make<Path>,
+    {
         let path = path.make(&self);
         P(Pat {
             id: DUMMY_NODE_ID,
@@ -983,7 +1092,9 @@ impl Builder {
     }
 
     pub fn lit_pat<L>(self, lit: L) -> P<Pat>
-        where L: Make<P<Expr>> {
+    where
+        L: Make<P<Expr>>,
+    {
         let lit = lit.make(&self);
         P(Pat {
             id: DUMMY_NODE_ID,
@@ -993,7 +1104,9 @@ impl Builder {
     }
 
     pub fn ident_ref_pat<I>(self, name: I) -> P<Pat>
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let name = name.make(&self);
         P(Pat {
             id: DUMMY_NODE_ID,
@@ -1002,12 +1115,12 @@ impl Builder {
         })
     }
 
-
     // Types
 
     pub fn barefn_ty<T>(self, decl: T) -> P<Ty>
-        where T: Make<P<FnDecl>> {
-
+    where
+        T: Make<P<FnDecl>>,
+    {
         let decl = decl.make(&self);
 
         let barefn = BareFnTy {
@@ -1022,11 +1135,13 @@ impl Builder {
             node: TyKind::BareFn(P(barefn)),
             span: DUMMY_SP,
         })
-
     }
 
     pub fn array_ty<T, E>(self, ty: T, len: E) -> P<Ty>
-        where T: Make<P<Ty>>, E: Make<P<Expr>> {
+    where
+        T: Make<P<Ty>>,
+        E: Make<P<Expr>>,
+    {
         let ty = ty.make(&self);
         let len = mk().anon_const(len.make(&self));
         P(Ty {
@@ -1037,7 +1152,9 @@ impl Builder {
     }
 
     pub fn slice_ty<T>(self, ty: T) -> P<Ty>
-        where T: Make<P<Ty>> {
+    where
+        T: Make<P<Ty>>,
+    {
         let ty = ty.make(&self);
         P(Ty {
             id: DUMMY_NODE_ID,
@@ -1047,32 +1164,54 @@ impl Builder {
     }
 
     pub fn ptr_ty<T>(self, ty: T) -> P<Ty>
-        where T: Make<P<Ty>> {
+    where
+        T: Make<P<Ty>>,
+    {
         let ty = ty.make(&self);
         P(Ty {
             id: DUMMY_NODE_ID,
-            node: TyKind::Ptr(MutTy { ty: ty, mutbl: self.mutbl }),
+            node: TyKind::Ptr(MutTy {
+                ty: ty,
+                mutbl: self.mutbl,
+            }),
             span: DUMMY_SP,
         })
     }
 
     pub fn ref_ty<T>(self, ty: T) -> P<Ty>
-        where T: Make<P<Ty>> {
+    where
+        T: Make<P<Ty>>,
+    {
         let ty = ty.make(&self);
         P(Ty {
             id: DUMMY_NODE_ID,
-            node: TyKind::Rptr(None, MutTy { ty: ty, mutbl: self.mutbl }),
+            node: TyKind::Rptr(
+                None,
+                MutTy {
+                    ty: ty,
+                    mutbl: self.mutbl,
+                },
+            ),
             span: DUMMY_SP,
         })
     }
 
-    pub fn ref_lt_ty<L,T>(self, lt: L, ty: T) -> P<Ty>
-        where L: Make<Lifetime>, T: Make<P<Ty>> {
+    pub fn ref_lt_ty<L, T>(self, lt: L, ty: T) -> P<Ty>
+    where
+        L: Make<Lifetime>,
+        T: Make<P<Ty>>,
+    {
         let lt = lt.make(&self);
         let ty = ty.make(&self);
         P(Ty {
             id: DUMMY_NODE_ID,
-            node: TyKind::Rptr(Some(lt), MutTy { ty: ty, mutbl: self.mutbl }),
+            node: TyKind::Rptr(
+                Some(lt),
+                MutTy {
+                    ty: ty,
+                    mutbl: self.mutbl,
+                },
+            ),
             span: DUMMY_SP,
         })
     }
@@ -1086,7 +1225,9 @@ impl Builder {
     }
 
     pub fn tuple_ty<T>(self, elem_tys: Vec<T>) -> P<Ty>
-        where T: Make<P<Ty>> {
+    where
+        T: Make<P<Ty>>,
+    {
         let elem_tys = elem_tys.into_iter().map(|ty| ty.make(&self)).collect();
         P(Ty {
             id: DUMMY_NODE_ID,
@@ -1096,12 +1237,16 @@ impl Builder {
     }
 
     pub fn path_ty<Pa>(self, path: Pa) -> P<Ty>
-        where Pa: Make<Path> {
+    where
+        Pa: Make<Path>,
+    {
         self.qpath_ty(None, path)
     }
 
     pub fn qpath_ty<Pa>(self, qself: Option<QSelf>, path: Pa) -> P<Ty>
-        where Pa: Make<Path> {
+    where
+        Pa: Make<Path>,
+    {
         let path = path.make(&self);
         P(Ty {
             id: DUMMY_NODE_ID,
@@ -1111,7 +1256,9 @@ impl Builder {
     }
 
     pub fn ident_ty<I>(self, name: I) -> P<Ty>
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         self.path_ty(vec![name])
     }
 
@@ -1123,11 +1270,12 @@ impl Builder {
         })
     }
 
-
     // Stmts
 
     pub fn local_stmt<L>(self, local: L) -> Stmt
-        where L: Make<P<Local>> {
+    where
+        L: Make<P<Local>>,
+    {
         let local = local.make(&self);
         Stmt {
             id: DUMMY_NODE_ID,
@@ -1137,7 +1285,9 @@ impl Builder {
     }
 
     pub fn expr_stmt<E>(self, expr: E) -> Stmt
-        where E: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+    {
         let expr = expr.make(&self);
         Stmt {
             id: DUMMY_NODE_ID,
@@ -1147,7 +1297,9 @@ impl Builder {
     }
 
     pub fn semi_stmt<E>(self, expr: E) -> Stmt
-        where E: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+    {
         let expr = expr.make(&self);
         Stmt {
             id: DUMMY_NODE_ID,
@@ -1156,8 +1308,10 @@ impl Builder {
         }
     }
 
-    pub fn item_stmt<I>(self, item: I)  -> Stmt
-        where I: Make<P<Item>> {
+    pub fn item_stmt<I>(self, item: I) -> Stmt
+    where
+        I: Make<P<Item>>,
+    {
         let item = item.make(&self);
         Stmt {
             id: DUMMY_NODE_ID,
@@ -1166,10 +1320,15 @@ impl Builder {
         }
     }
 
-
     // Items
 
-    fn item(name: Ident, attrs: Vec<Attribute>, vis: Visibility, span: Span, node: ItemKind) -> P<Item> {
+    fn item(
+        name: Ident,
+        attrs: Vec<Attribute>,
+        vis: Visibility,
+        span: Span,
+        node: ItemKind,
+    ) -> P<Item> {
         P(Item {
             ident: name,
             attrs: attrs,
@@ -1182,38 +1341,67 @@ impl Builder {
     }
 
     pub fn static_item<I, T, E>(self, name: I, ty: T, init: E) -> P<Item>
-        where I: Make<Ident>, T: Make<P<Ty>>, E: Make<P<Expr>> {
+    where
+        I: Make<Ident>,
+        T: Make<P<Ty>>,
+        E: Make<P<Expr>>,
+    {
         let name = name.make(&self);
         let ty = ty.make(&self);
         let init = init.make(&self);
-        Self::item(name, self.attrs, self.vis, self.span,
-                   ItemKind::Static(ty, self.mutbl, init))
+        Self::item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Static(ty, self.mutbl, init),
+        )
     }
 
     pub fn const_item<I, T, E>(self, name: I, ty: T, init: E) -> P<Item>
-        where I: Make<Ident>, T: Make<P<Ty>>, E: Make<P<Expr>> {
+    where
+        I: Make<Ident>,
+        T: Make<P<Ty>>,
+        E: Make<P<Expr>>,
+    {
         let name = name.make(&self);
         let ty = ty.make(&self);
         let init = init.make(&self);
-        Self::item(name, self.attrs, self.vis, self.span, ItemKind::Const(ty, init))
+        Self::item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Const(ty, init),
+        )
     }
 
     pub fn fn_item<I, D, B>(self, name: I, decl: D, block: B) -> P<Item>
-        where I: Make<Ident>, D: Make<P<FnDecl>>, B: Make<P<Block>> {
+    where
+        I: Make<Ident>,
+        D: Make<P<FnDecl>>,
+        B: Make<P<Block>>,
+    {
         let name = name.make(&self);
         let decl = decl.make(&self);
         let block = block.make(&self);
-        Self::item(name, self.attrs, self.vis, self.span,
-                   ItemKind::Fn(decl,
-                                self.unsafety,
-                                dummy_spanned(self.constness),
-                                self.abi,
-                                self.generics,
-                                block))
+        Self::item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Fn(
+                decl,
+                self.unsafety,
+                dummy_spanned(self.constness),
+                self.abi,
+                self.generics,
+                block,
+            ),
+        )
     }
 
-    pub fn fn_decl(self, inputs: Vec<Arg>, output: FunctionRetTy, variadic: bool) -> P<FnDecl>
-    {
+    pub fn fn_decl(self, inputs: Vec<Arg>, output: FunctionRetTy, variadic: bool) -> P<FnDecl> {
         P(FnDecl {
             inputs,
             output,
@@ -1222,15 +1410,24 @@ impl Builder {
     }
 
     pub fn struct_item<I>(self, name: I, fields: Vec<StructField>) -> P<Item>
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let name = name.make(&self);
-        Self::item(name, self.attrs, self.vis, self.span,
-                   ItemKind::Struct(VariantData::Struct(fields, DUMMY_NODE_ID),
-                                    self.generics))
+        Self::item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Struct(VariantData::Struct(fields, DUMMY_NODE_ID), self.generics),
+        )
     }
 
     pub fn struct_field<I, T>(self, ident: I, ty: T) -> StructField
-        where I: Make<Ident>, T: Make<P<Ty>> {
+    where
+        I: Make<Ident>,
+        T: Make<P<Ty>>,
+    {
         let ident = ident.make(&self);
         let ty = ty.make(&self);
         StructField {
@@ -1244,22 +1441,37 @@ impl Builder {
     }
 
     pub fn union_item<I>(self, name: I, fields: Vec<StructField>) -> P<Item>
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let name = name.make(&self);
-        Self::item(name, self.attrs, self.vis, self.span,
-                   ItemKind::Union(VariantData::Struct(fields, DUMMY_NODE_ID),
-                                    self.generics))
+        Self::item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Union(VariantData::Struct(fields, DUMMY_NODE_ID), self.generics),
+        )
     }
 
     pub fn enum_item<I>(self, name: I, fields: Vec<Variant>) -> P<Item>
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let name = name.make(&self);
-        Self::item(name, self.attrs, self.vis, self.span,
-                   ItemKind::Enum(EnumDef { variants: fields }, self.generics))
+        Self::item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Enum(EnumDef { variants: fields }, self.generics),
+        )
     }
 
     pub fn enum_field<T>(self, ty: T) -> StructField
-        where T: Make<P<Ty>> {
+    where
+        T: Make<P<Ty>>,
+    {
         let ty = ty.make(&self);
         StructField {
             span: DUMMY_SP,
@@ -1272,7 +1484,10 @@ impl Builder {
     }
 
     pub fn type_item<I, T>(self, name: I, ty: T) -> P<Item>
-        where I: Make<Ident>, T: Make<P<Ty>> {
+    where
+        I: Make<Ident>,
+        T: Make<P<Ty>>,
+    {
         let ty = ty.make(&self);
         let name = name.make(&self);
         let kind = ItemKind::Ty(ty, self.generics);
@@ -1280,7 +1495,9 @@ impl Builder {
     }
 
     pub fn variant<I>(self, ident: I, data: VariantData) -> Variant
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let ident = ident.make(&self);
         dummy_spanned(Variant_ {
             ident,
@@ -1290,8 +1507,11 @@ impl Builder {
         })
     }
 
-    pub fn unit_variant<I,E>(self, name: I, disr_expr: Option<E>) -> Variant
-        where I: Make<Ident>, E: Make<P<Expr>> {
+    pub fn unit_variant<I, E>(self, name: I, disr_expr: Option<E>) -> Variant
+    where
+        I: Make<Ident>,
+        E: Make<P<Expr>>,
+    {
         let ident = name.make(&self);
         let disr_expr = disr_expr.map(|d| mk().anon_const(d.make(&self)));
         dummy_spanned(Variant_ {
@@ -1303,25 +1523,40 @@ impl Builder {
     }
 
     pub fn impl_item<T>(self, ty: T, items: Vec<ImplItem>) -> P<Item>
-        where T: Make<P<Ty>>
+    where
+        T: Make<P<Ty>>,
     {
         let ty = ty.make(&self);
-        Self::item(keywords::Invalid.ident(), self.attrs, self.vis, self.span,
-                   ItemKind::Impl(self.unsafety,
-                                  ImplPolarity::Positive,
-                                  Defaultness::Final,
-                                  self.generics,
-                                  None, // not a trait implementation
-                                  ty,
-                                  items))
+        Self::item(
+            keywords::Invalid.ident(),
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Impl(
+                self.unsafety,
+                ImplPolarity::Positive,
+                Defaultness::Final,
+                self.generics,
+                None, // not a trait implementation
+                ty,
+                items,
+            ),
+        )
     }
 
     pub fn extern_crate_item<I>(self, name: I, rename: Option<I>) -> P<Item>
-        where I: Make<Ident>
+    where
+        I: Make<Ident>,
     {
         let name = name.make(&self);
         let rename = rename.map(|n| n.make(&self).name);
-        Self::item(name, self.attrs, self.vis, self.span, ItemKind::ExternCrate(rename))
+        Self::item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::ExternCrate(rename),
+        )
     }
 
     // `use <path>;` item
@@ -1329,7 +1564,9 @@ impl Builder {
     // if we ever need them, we should add support for globs and nested trees,
     // e.g., `use foo::*;` and `use foo::{a, b, c};`
     pub fn use_item<Pa, I>(self, path: Pa, rename: Option<I>) -> P<Item>
-        where Pa: Make<Path>, I: Make<Ident>
+    where
+        Pa: Make<Path>,
+        I: Make<Ident>,
     {
         let path = path.make(&self);
         let rename = rename.map(|n| n.make(&self));
@@ -1338,19 +1575,34 @@ impl Builder {
             prefix: path,
             kind: UseTreeKind::Simple(rename, DUMMY_NODE_ID, DUMMY_NODE_ID),
         };
-        Self::item(keywords::Invalid.ident(), self.attrs, self.vis, self.span,
-                   ItemKind::Use(P(use_tree)))
+        Self::item(
+            keywords::Invalid.ident(),
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::Use(P(use_tree)),
+        )
     }
 
-    pub fn foreign_items(self, items: Vec<ForeignItem>) -> P<Item>
-    {
-        let fgn_mod = ForeignMod { abi: self.abi, items };
-        Self::item(keywords::Invalid.ident(), self.attrs, self.vis, self.span, ItemKind::ForeignMod(fgn_mod))
+    pub fn foreign_items(self, items: Vec<ForeignItem>) -> P<Item> {
+        let fgn_mod = ForeignMod {
+            abi: self.abi,
+            items,
+        };
+        Self::item(
+            keywords::Invalid.ident(),
+            self.attrs,
+            self.vis,
+            self.span,
+            ItemKind::ForeignMod(fgn_mod),
+        )
     }
 
     pub fn module<I, T>(self, name: I, items: T) -> P<Item>
-        where I: Make<Ident>, T: Make<Vec<P<Item>>> {
-
+    where
+        I: Make<Ident>,
+        T: Make<Vec<P<Item>>>,
+    {
         let name = name.make(&self);
         let items = items.make(&self);
         let module = Mod {
@@ -1362,7 +1614,13 @@ impl Builder {
 
     // Foreign Items
 
-    fn foreign_item(name: Ident, attrs: Vec<Attribute>, vis: Visibility, span: Span, node: ForeignItemKind) -> ForeignItem {
+    fn foreign_item(
+        name: Ident,
+        attrs: Vec<Attribute>,
+        vis: Visibility,
+        span: Span,
+        node: ForeignItemKind,
+    ) -> ForeignItem {
         ForeignItem {
             ident: name,
             attrs: attrs,
@@ -1374,31 +1632,52 @@ impl Builder {
     }
 
     pub fn foreign_fn<I, D>(self, name: I, decl: D) -> ForeignItem
-        where I: Make<Ident>, D: Make<P<FnDecl>> {
+    where
+        I: Make<Ident>,
+        D: Make<P<FnDecl>>,
+    {
         let name = name.make(&self);
         let decl = decl.make(&self);
-        Self::foreign_item(name, self.attrs, self.vis, self.span, ForeignItemKind::Fn(decl, self.generics))
+        Self::foreign_item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ForeignItemKind::Fn(decl, self.generics),
+        )
     }
 
     pub fn foreign_static<I, T>(self, name: I, ty: T) -> ForeignItem
-        where I: Make<Ident>, T: Make<P<Ty>> {
+    where
+        I: Make<Ident>,
+        T: Make<P<Ty>>,
+    {
         let name = name.make(&self);
         let ty = ty.make(&self);
         let is_mut = self.mutbl == Mutability::Mutable;
-        Self::foreign_item(name, self.attrs, self.vis, self.span, ForeignItemKind::Static(ty, is_mut))
+        Self::foreign_item(
+            name,
+            self.attrs,
+            self.vis,
+            self.span,
+            ForeignItemKind::Static(ty, is_mut),
+        )
     }
 
     pub fn foreign_ty<I>(self, name: I) -> ForeignItem
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let name = name.make(&self);
         Self::foreign_item(name, self.attrs, self.vis, self.span, ForeignItemKind::Ty)
     }
 
-
     // Misc nodes
 
     pub fn block<S>(self, stmts: Vec<S>) -> P<Block>
-        where S: Make<Stmt> {
+    where
+        S: Make<Stmt>,
+    {
         let stmts = stmts.into_iter().map(|s| s.make(&self)).collect();
         P(Block {
             stmts: stmts,
@@ -1413,7 +1692,10 @@ impl Builder {
     }
 
     pub fn arg<T, Pt>(self, ty: T, pat: Pt) -> Arg
-        where T: Make<P<Ty>>, Pt: Make<P<Pat>> {
+    where
+        T: Make<P<Ty>>,
+        Pt: Make<P<Pat>>,
+    {
         let ty = ty.make(&self);
         let pat = pat.make(&self);
         Arg {
@@ -1424,7 +1706,9 @@ impl Builder {
     }
 
     pub fn self_arg<S>(self, kind: S) -> Arg
-        where S: Make<SelfKind> {
+    where
+        S: Make<SelfKind>,
+    {
         let kind = kind.make(&self);
         let eself = dummy_spanned(kind);
         let ident = "self".make(&self);
@@ -1432,7 +1716,9 @@ impl Builder {
     }
 
     pub fn ty_param<I>(self, ident: I) -> TyParam
-        where I: Make<Ident> {
+    where
+        I: Make<Ident>,
+    {
         let ident = ident.make(&self);
         TyParam {
             attrs: self.attrs.into(),
@@ -1452,7 +1738,9 @@ impl Builder {
     }
 
     pub fn attribute<Pa, Ts>(self, style: AttrStyle, path: Pa, tokens: Ts) -> Attribute
-        where Pa: Make<Path>, Ts: Make<ThinTokenStream>
+    where
+        Pa: Make<Path>,
+        Ts: Make<ThinTokenStream>,
     {
         let path = path.make(&self);
         let tokens = tokens.make(&self).into();
@@ -1466,17 +1754,18 @@ impl Builder {
         }
     }
 
-    pub fn meta_item_attr(mut self, style: AttrStyle, meta_item: MetaItem) -> Self
-    {
+    pub fn meta_item_attr(mut self, style: AttrStyle, meta_item: MetaItem) -> Self {
         let mut attr = mk_attr_inner(DUMMY_SP, AttrId(0), meta_item);
         attr.style = style;
         self.attrs.push(attr);
         self
     }
 
-    pub fn meta_item<I,K>(self, path: I, kind: K) -> MetaItem
-        where I: Make<Path>, K: Make<MetaItemKind> {
-        
+    pub fn meta_item<I, K>(self, path: I, kind: K) -> MetaItem
+    where
+        I: Make<Path>,
+        K: Make<MetaItemKind>,
+    {
         let path = path.make(&self);
         let kind = kind.make(&self);
         MetaItem {
@@ -1487,8 +1776,9 @@ impl Builder {
     }
 
     pub fn nested_meta_item<K>(self, kind: K) -> NestedMetaItem
-        where K: Make<NestedMetaItemKind>
-     {
+    where
+        K: Make<NestedMetaItemKind>,
+    {
         let kind = kind.make(&self);
         dummy_spanned(kind)
     }
@@ -1497,16 +1787,20 @@ impl Builder {
     // into a vector of inner attributes, e.g.:
     // `#[foo]` => `#![foo]`
     pub fn as_inner_attrs(self) -> Vec<Attribute> {
-        self.attrs.into_iter().map(|outer_attr| {
-            Attribute {
+        self.attrs
+            .into_iter()
+            .map(|outer_attr| Attribute {
                 style: AttrStyle::Inner,
                 ..outer_attr
-            }
-        }).collect::<Vec<Attribute>>()
+            })
+            .collect::<Vec<Attribute>>()
     }
 
     pub fn mac<Pa, Ts>(self, path: Pa, tts: Ts) -> Mac
-        where Pa: Make<Path>, Ts: Make<ThinTokenStream> {
+    where
+        Pa: Make<Path>,
+        Ts: Make<ThinTokenStream>,
+    {
         let path = path.make(&self);
         let tts = tts.make(&self);
         dummy_spanned(Mac_ {
@@ -1517,7 +1811,11 @@ impl Builder {
     }
 
     pub fn local<V, T, E>(self, pat: V, ty: Option<T>, init: Option<E>) -> Local
-        where V: Make<P<Pat>>, T: Make<P<Ty>>, E: Make<P<Expr>> {
+    where
+        V: Make<P<Pat>>,
+        T: Make<P<Ty>>,
+        E: Make<P<Expr>>,
+    {
         let pat = pat.make(&self);
         let ty = ty.map(|x| x.make(&self));
         let init = init.map(|x| x.make(&self));
@@ -1532,7 +1830,9 @@ impl Builder {
     }
 
     pub fn return_expr<E>(self, val: Option<E>) -> P<Expr>
-        where E: Make<P<Expr>> {
+    where
+        E: Make<P<Expr>>,
+    {
         let val = val.map(|x| x.make(&self));
         P(Expr {
             id: DUMMY_NODE_ID,
@@ -1543,7 +1843,9 @@ impl Builder {
     }
 
     pub fn continue_expr<L>(self, label: Option<L>) -> P<Expr>
-        where L: Make<Label> {
+    where
+        L: Make<Label>,
+    {
         let label = label.map(|l| l.make(&self));
 
         P(Expr {
@@ -1555,7 +1857,9 @@ impl Builder {
     }
 
     pub fn break_expr<L>(self, label: Option<L>) -> P<Expr>
-        where L: Make<Label> {
+    where
+        L: Make<Label>,
+    {
         let label = label.map(|l| l.make(&self));
 
         P(Expr {
@@ -1566,8 +1870,16 @@ impl Builder {
         })
     }
 
-    pub fn closure_expr<D,E>(self, capture: CaptureBy, mov: Movability, decl: D, body: E) -> P<Expr>
-        where D: Make<P<FnDecl>>, E: Make<P<Expr>>
+    pub fn closure_expr<D, E>(
+        self,
+        capture: CaptureBy,
+        mov: Movability,
+        decl: D,
+        body: E,
+    ) -> P<Expr>
+    where
+        D: Make<P<FnDecl>>,
+        E: Make<P<Expr>>,
     {
         let decl = decl.make(&self);
         let body = body.make(&self);
@@ -1590,8 +1902,8 @@ pub fn mk() -> Builder {
 fn has_rightmost_cast(expr: &Expr) -> bool {
     match &expr.node {
         &ExprKind::Cast(..) => true,
-        &ExprKind::Unary(_,ref arg) => has_rightmost_cast(&**arg),
-        &ExprKind::Binary(_,_,ref rhs) => has_rightmost_cast(&**rhs),
+        &ExprKind::Unary(_, ref arg) => has_rightmost_cast(&**arg),
+        &ExprKind::Binary(_, _, ref rhs) => has_rightmost_cast(&**rhs),
         _ => false,
     }
 }

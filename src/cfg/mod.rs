@@ -15,43 +15,45 @@
 //!   - convert the `Vec<Structure<Stmt>>` back into a `Vec<Stmt>`
 //!
 
-use syntax;
-use syntax::ast::{Arm, Expr, ExprKind, LitIntType, Pat, Stmt, StmtKind};
-use syntax::ptr::P;
-use syntax::codemap::{DUMMY_SP};
-use std::collections::{HashSet, HashMap};
 use c_ast::CLabelId;
-use std::ops::Index;
-use syntax::print::pprust;
-use std::io;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::io;
 use std::io::Write;
 use std::ops::Deref;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
-use std::hash::Hash;
-use std::collections::BTreeSet;
+use std::ops::Index;
+use syntax;
+use syntax::ast::{Arm, Expr, ExprKind, LitIntType, Pat, Stmt, StmtKind};
+use syntax::codemap::DUMMY_SP;
+use syntax::print::pprust;
+use syntax::ptr::P;
 
 use indexmap::IndexMap;
 
-use serde::ser::{Serialize, Serializer, SerializeStruct, SerializeStructVariant, SerializeTupleVariant};
+use serde::ser::{
+    Serialize, SerializeStruct, SerializeStructVariant, SerializeTupleVariant, Serializer,
+};
 use serde_json;
 
-use translator::*;
-use with_stmts::WithStmts;
 use c_ast::*;
 use rust_ast::mk;
+use translator::*;
+use with_stmts::WithStmts;
 
-pub mod relooper;
-pub mod structures;
 pub mod loops;
 pub mod multiples;
+pub mod relooper;
+pub mod structures;
 
 use cfg::loops::*;
 use cfg::multiples::*;
 
 /// These labels identify basic blocks in a regular CFG.
-#[derive(Copy,Clone,PartialEq,Eq,PartialOrd,Ord,Debug,Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub enum Label {
     /// Some labels come directly from the C side (namely those created from labels, cases, and
     /// defaults). For those, we just re-use the `CLabelId` of the C AST node.
@@ -94,7 +96,7 @@ impl Serialize for Label {
 }
 
 /// These labels identify _structure_ basic blocks in a structure CFG.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum StructureLabel<S> {
     GoTo(Label),
     ExitTo(Label),
@@ -102,7 +104,6 @@ pub enum StructureLabel<S> {
 }
 
 impl StructureLabel<StmtOrDecl> {
-
     /// Produce a new `StructureLabel` from the existing one by replacing all `StmtOrDecl::Decl`
     /// variants with either a declaration with initializer or only an initializer.
     fn place_decls(
@@ -114,16 +115,18 @@ impl StructureLabel<StmtOrDecl> {
             StructureLabel::GoTo(l) => StructureLabel::GoTo(l),
             StructureLabel::ExitTo(l) => StructureLabel::ExitTo(l),
             StructureLabel::Nested(vs) => {
-                let vs = vs.into_iter().map(|s| s.place_decls(lift_me, store)).collect();
+                let vs = vs
+                    .into_iter()
+                    .map(|s| s.place_decls(lift_me, store))
+                    .collect();
                 StructureLabel::Nested(vs)
             }
         }
     }
 }
 
-
 /// These are the things that the relooper algorithm produces.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum Structure<Stmt> {
     /// Series of statements and what to do after
     Simple {
@@ -141,7 +144,7 @@ pub enum Structure<Stmt> {
         entries: HashSet<Label>,
         branches: IndexMap<Label, Vec<Structure<Stmt>>>,
         then: Vec<Structure<Stmt>>,
-    }
+    },
 }
 
 impl<S> Structure<S> {
@@ -155,32 +158,64 @@ impl<S> Structure<S> {
 }
 
 impl Structure<StmtOrDecl> {
-
     /// Produce a new `Structure` from the existing one by replacing all `StmtOrDecl::Decl`
     /// variants with either a declaration with initializer or only an initializer.
-    fn place_decls(self, lift_me: &HashSet<CDeclId>, store: &mut DeclStmtStore) -> Structure<StmtOrComment> {
+    fn place_decls(
+        self,
+        lift_me: &HashSet<CDeclId>,
+        store: &mut DeclStmtStore,
+    ) -> Structure<StmtOrComment> {
         match self {
-            Structure::Simple { entries, body, terminator } => {
+            Structure::Simple {
+                entries,
+                body,
+                terminator,
+            } => {
                 let mut body = body
                     .into_iter()
-                    .flat_map(|s: StmtOrDecl| -> Vec<StmtOrComment> { s.place_decls(lift_me, store) })
+                    .flat_map(|s: StmtOrDecl| -> Vec<StmtOrComment> {
+                        s.place_decls(lift_me, store)
+                    })
                     .collect();
                 let terminator = terminator.place_decls(lift_me, store);
-                Structure::Simple { entries, body, terminator }
+                Structure::Simple {
+                    entries,
+                    body,
+                    terminator,
+                }
             }
             Structure::Loop { entries, body } => {
-                let body = body.into_iter().map(|s| s.place_decls(lift_me, store)).collect();
+                let body = body
+                    .into_iter()
+                    .map(|s| s.place_decls(lift_me, store))
+                    .collect();
                 Structure::Loop { entries, body }
             }
-            Structure::Multiple { entries, branches, then } => {
+            Structure::Multiple {
+                entries,
+                branches,
+                then,
+            } => {
                 let branches = branches
                     .into_iter()
-                    .map(|(lbl, vs)|
-                        (lbl, vs.into_iter().map(|s| s.place_decls(lift_me, store)).collect())
-                    )
+                    .map(|(lbl, vs)| {
+                        (
+                            lbl,
+                            vs.into_iter()
+                                .map(|s| s.place_decls(lift_me, store))
+                                .collect(),
+                        )
+                    })
                     .collect();
-                let then = then.into_iter().map(|s| s.place_decls(lift_me, store)).collect();
-                Structure::Multiple { entries, branches, then }
+                let then = then
+                    .into_iter()
+                    .map(|s| s.place_decls(lift_me, store))
+                    .collect();
+                Structure::Multiple {
+                    entries,
+                    branches,
+                    then,
+                }
             }
         }
     }
@@ -188,7 +223,7 @@ impl Structure<StmtOrDecl> {
 
 /// Generalized basic block.
 #[derive(Clone, Debug)]
-pub struct BasicBlock<L,S> {
+pub struct BasicBlock<L, S> {
     /// Jump-free code
     body: Vec<S>,
 
@@ -213,7 +248,6 @@ impl<L: Clone, S1> BasicBlock<L, S1> {
             defined: self.defined.clone(),
         }
     }
-
 }
 
 impl<L: Serialize, St: Serialize> Serialize for BasicBlock<L, St> {
@@ -225,9 +259,14 @@ impl<L: Serialize, St: Serialize> Serialize for BasicBlock<L, St> {
     }
 }
 
-impl<L,S> BasicBlock<L,S> {
+impl<L, S> BasicBlock<L, S> {
     fn new(terminator: GenTerminator<L>) -> Self {
-        BasicBlock { body: vec![], terminator, live: HashSet::new(), defined: HashSet::new() }
+        BasicBlock {
+            body: vec![],
+            terminator,
+            live: HashSet::new(),
+            defined: HashSet::new(),
+        }
     }
 
     fn new_jump(target: L) -> Self {
@@ -235,19 +274,16 @@ impl<L,S> BasicBlock<L,S> {
     }
 }
 
-impl<S1,S2> BasicBlock<StructureLabel<S1>,S2> {
-
+impl<S1, S2> BasicBlock<StructureLabel<S1>, S2> {
     /// Get all of the `GoTo` targets of a structure basic block
     fn successors(&self) -> HashSet<Label> {
         self.terminator
             .get_labels()
             .iter()
-            .filter_map(|&slbl|
-                match slbl {
-                    &StructureLabel::GoTo(tgt) => Some(tgt),
-                    _ => None,
-                }
-            )
+            .filter_map(|&slbl| match slbl {
+                &StructureLabel::GoTo(tgt) => Some(tgt),
+                _ => None,
+            })
             .collect()
     }
 }
@@ -269,7 +305,7 @@ pub enum GenTerminator<Lbl> {
     Switch {
         expr: P<Expr>,
         cases: Vec<(Vec<P<Pat>>, Lbl)>, // TODO: support ranges of expressions
-    }
+    },
 }
 
 impl<L: Serialize> Serialize for GenTerminator<L> {
@@ -288,7 +324,10 @@ impl<L: Serialize> Serialize for GenTerminator<L> {
                 tv.serialize_field("else", l2)?;
                 tv.end()
             }
-            GenTerminator::Switch { ref expr, ref cases } => {
+            GenTerminator::Switch {
+                ref expr,
+                ref cases,
+            } => {
                 let mut cases_sane: Vec<(String, &L)> = vec![];
                 for &(ref ps, ref l) in cases {
                     let pats: Vec<String> = ps.iter().map(|x| pprust::pat_to_string(x)).collect();
@@ -308,17 +347,22 @@ impl<L: Serialize> Serialize for GenTerminator<L> {
 use self::GenTerminator::*;
 
 impl<L> GenTerminator<L> {
-
     /// Produce a new terminator by transforming all of the labels in that terminator.
     fn map_labels<F: Fn(&L) -> N, N>(&self, func: F) -> GenTerminator<N> {
         match self {
             &End => End,
             &Jump(ref l) => Jump(func(l)),
             &Branch(ref e, ref l1, ref l2) => Branch(e.clone(), func(l1), func(l2)),
-            &Switch { ref expr, ref cases } => Switch {
+            &Switch {
+                ref expr,
+                ref cases,
+            } => Switch {
                 expr: expr.clone(),
-                cases: cases.iter().map(|&(ref e, ref l)| (e.clone(), func(l))).collect(),
-            }
+                cases: cases
+                    .iter()
+                    .map(|&(ref e, ref l)| (e.clone(), func(l)))
+                    .collect(),
+            },
         }
     }
 
@@ -327,9 +371,8 @@ impl<L> GenTerminator<L> {
         match self {
             &End => vec![],
             &Jump(ref l) => vec![l],
-            &Branch(_, ref l1, ref l2) => vec![l1,l2],
-            &Switch { ref cases, .. } =>
-                cases.iter().map(|&(_, ref l)| l).collect(),
+            &Branch(_, ref l1, ref l2) => vec![l1, l2],
+            &Switch { ref cases, .. } => cases.iter().map(|&(_, ref l)| l).collect(),
         }
     }
 
@@ -338,33 +381,33 @@ impl<L> GenTerminator<L> {
         match self {
             &mut End => vec![],
             &mut Jump(ref mut l) => vec![l],
-            &mut Branch(_, ref mut l1, ref mut l2) => vec![l1,l2],
-            &mut Switch { ref mut cases, .. } =>
-                cases.iter_mut().map(|&mut (_, ref mut l)| l).collect(),
+            &mut Branch(_, ref mut l1, ref mut l2) => vec![l1, l2],
+            &mut Switch { ref mut cases, .. } => {
+                cases.iter_mut().map(|&mut (_, ref mut l)| l).collect()
+            }
         }
     }
 }
 
 impl GenTerminator<StructureLabel<StmtOrDecl>> {
-
     /// Produce a new `GenTerminator` from the existing one by replacing all `StmtOrDecl::Decl`
     /// variants with either a declaration with initializer or only an initializer.
     fn place_decls(
         self,
         lift_me: &HashSet<CDeclId>,
-        store: &mut DeclStmtStore
+        store: &mut DeclStmtStore,
     ) -> GenTerminator<StructureLabel<StmtOrComment>> {
         match self {
             End => End,
             Jump(l) => {
                 let l = l.place_decls(lift_me, store);
                 Jump(l)
-            },
+            }
             Branch(e, l1, l2) => {
                 let l1 = l1.place_decls(lift_me, store);
                 let l2 = l2.place_decls(lift_me, store);
                 Branch(e, l1, l2)
-            },
+            }
             Switch { expr, cases } => {
                 let cases = cases
                     .into_iter()
@@ -380,7 +423,7 @@ impl GenTerminator<StructureLabel<StmtOrDecl>> {
 /// been seen which translating the body of the switch.
 #[derive(Clone, Debug, Default)]
 pub struct SwitchCases {
-    cases: Vec<(P<Pat>,Label)>,
+    cases: Vec<(P<Pat>, Label)>,
     default: Option<Label>,
 }
 
@@ -404,7 +447,7 @@ impl StmtOrDecl {
             StmtOrDecl::Decl(ref d) => {
                 let ss = store.peek_decl_and_assign(*d).unwrap();
                 ss.iter().map(pprust::stmt_to_string).collect()
-            },
+            }
             StmtOrDecl::Comment(ref s) => vec![s.clone()],
         }
     }
@@ -421,19 +464,28 @@ pub enum StmtOrComment {
 }
 
 impl StmtOrDecl {
-
     /// Produce a `Stmt` by replacing `StmtOrDecl::Decl`  variants with either a declaration with
     /// initializer or only an initializer.
-    fn place_decls(self, lift_me: &HashSet<CDeclId>, store: &mut DeclStmtStore) -> Vec<StmtOrComment> {
+    fn place_decls(
+        self,
+        lift_me: &HashSet<CDeclId>,
+        store: &mut DeclStmtStore,
+    ) -> Vec<StmtOrComment> {
         match self {
             StmtOrDecl::Stmt(s) => vec![StmtOrComment::Stmt(s)],
             StmtOrDecl::Comment(c) => vec![StmtOrComment::Comment(c)],
-            StmtOrDecl::Decl(d) if lift_me.contains(&d) => {
-                store.extract_assign(d).unwrap().into_iter().map(StmtOrComment::Stmt).collect()
-            },
-            StmtOrDecl::Decl(d) => {
-                store.extract_decl_and_assign(d).unwrap().into_iter().map(StmtOrComment::Stmt).collect()
-            },
+            StmtOrDecl::Decl(d) if lift_me.contains(&d) => store
+                .extract_assign(d)
+                .unwrap()
+                .into_iter()
+                .map(StmtOrComment::Stmt)
+                .collect(),
+            StmtOrDecl::Decl(d) => store
+                .extract_decl_and_assign(d)
+                .unwrap()
+                .into_iter()
+                .map(StmtOrComment::Stmt)
+                .collect(),
         }
     }
 }
@@ -445,7 +497,7 @@ pub struct Cfg<Lbl: Ord + Hash, Stmt> {
     entries: HashSet<Lbl>,
 
     /// Nodes in the graph
-    nodes: HashMap<Lbl, BasicBlock<Lbl,Stmt>>,
+    nodes: HashMap<Lbl, BasicBlock<Lbl, Stmt>>,
 
     /// Loops in the graph
     loops: LoopInfo<Lbl>,
@@ -459,11 +511,20 @@ impl<L: Clone + Ord + Hash, S1> Cfg<L, S1> {
     /// function provided.
     pub fn map_stmts<S2, F: Fn(&S1) -> S2>(&self, f: F) -> Cfg<L, S2> {
         let entries = self.entries.clone();
-        let nodes = self.nodes.iter().map(|(l,bb)| (l.clone(), bb.map_stmts(&f))).collect();
+        let nodes = self
+            .nodes
+            .iter()
+            .map(|(l, bb)| (l.clone(), bb.map_stmts(&f)))
+            .collect();
         let loops = self.loops.clone();
         let multiples = self.multiples.clone();
 
-        Cfg { entries, nodes, loops, multiples }
+        Cfg {
+            entries,
+            nodes,
+            loops,
+            multiples,
+        }
     }
 }
 
@@ -505,40 +566,44 @@ pub enum ImplicitReturnType {
 
 /// A complete control-flow graph
 impl Cfg<Label, StmtOrDecl> {
-
     /// Completely process a statement into a control flow graph.
     pub fn from_stmts(
         translator: &Translation,
         stmt_ids: &[CStmtId],
         ret: ImplicitReturnType,
     ) -> Result<(Self, DeclStmtStore), String> {
-
         let allow_return = match ret {
-            ImplicitReturnType::StmtExpr(_,_,_) => false,
+            ImplicitReturnType::StmtExpr(_, _, _) => false,
             _ => true,
         };
         let mut cfg_builder = CfgBuilder::new(allow_return);
-        let entry = *cfg_builder.graph.entries.iter().next().ok_or("from_stmts: expected entry")?;
+        let entry = *cfg_builder
+            .graph
+            .entries
+            .iter()
+            .next()
+            .ok_or("from_stmts: expected entry")?;
 
         translator.with_scope(|| -> Result<(), String> {
             let entry_wip = cfg_builder.new_wip_block(entry);
             let body_stuff = cfg_builder.convert_stmts_help(translator, stmt_ids, entry_wip)?;
 
-            if let Some(WipBlock { label: body_label, mut body, defined, live }) = body_stuff {
-
+            if let Some(WipBlock {
+                label: body_label,
+                mut body,
+                defined,
+                live,
+            }) = body_stuff
+            {
                 let ret_expr: Option<P<Expr>> = match ret {
                     ImplicitReturnType::Main => Some(mk().lit_expr(mk().int_lit(0, ""))),
                     ImplicitReturnType::Void => None as Option<P<Expr>>,
-                    ImplicitReturnType::NoImplicitReturnType => Some(
-                        translator.panic("Reached end of non-void function without returning")
-                    ),
+                    ImplicitReturnType::NoImplicitReturnType => {
+                        Some(translator.panic("Reached end of non-void function without returning"))
+                    }
                     ImplicitReturnType::StmtExpr(use_, expr_id, is_static) => {
-                        let WithStmts { mut stmts, val } = translator.convert_expr(
-                            use_,
-                            expr_id,
-                            is_static,
-                            DecayRef::Default,
-                        )?;
+                        let WithStmts { mut stmts, val } =
+                            translator.convert_expr(use_, expr_id, is_static, DecayRef::Default)?;
 
                         body.extend(stmts.into_iter().map(|s| StmtOrDecl::Stmt(s)));
                         Some(val)
@@ -546,7 +611,12 @@ impl Cfg<Label, StmtOrDecl> {
                 };
                 body.push(StmtOrDecl::Stmt(mk().semi_stmt(mk().return_expr(ret_expr))));
 
-                let body_bb = BasicBlock { body, terminator: End, defined, live };
+                let body_bb = BasicBlock {
+                    body,
+                    terminator: End,
+                    defined,
+                    live,
+                };
                 cfg_builder.add_block(body_label, body_bb);
             }
 
@@ -554,14 +624,14 @@ impl Cfg<Label, StmtOrDecl> {
         })?;
 
         // Check the graph doesn't reference any labels it doesn't contain
-        let bad_labels: Vec<&CLabelId> = cfg_builder.c_labels_used
+        let bad_labels: Vec<&CLabelId> = cfg_builder
+            .c_labels_used
             .difference(&cfg_builder.c_labels_defined)
             .collect();
         if !bad_labels.is_empty() {
             Err(format!(
                 "Control flow graph for statements {:?} references undefined label(s): {:?}",
-                stmt_ids,
-                bad_labels,
+                stmt_ids, bad_labels,
             ))?
         }
 
@@ -575,7 +645,6 @@ impl Cfg<Label, StmtOrDecl> {
 /// The polymorphism here is only to make it clear exactly how little these functions need to know
 /// about the actual contents of the CFG - we only actual call these on one monomorphic CFG type.
 impl<Lbl: Copy + Ord + Hash, Stmt> Cfg<Lbl, Stmt> {
-
     /// Removes blocks that cannot be reached from the CFG
     pub fn prune_unreachable_blocks_mut(&mut self) -> () {
         let visited: HashSet<Lbl> = {
@@ -587,7 +656,10 @@ impl<Lbl: Copy + Ord + Hash, Stmt> Cfg<Lbl, Stmt> {
                     continue;
                 }
 
-                let blk = self.nodes.get(lbl).expect("prune_unreachable_blocks: block not found");
+                let blk = self
+                    .nodes
+                    .get(lbl)
+                    .expect("prune_unreachable_blocks: block not found");
                 visited.insert(*lbl);
 
                 for lbl in &blk.terminator.get_labels() {
@@ -608,10 +680,10 @@ impl<Lbl: Copy + Ord + Hash, Stmt> Cfg<Lbl, Stmt> {
     /// Removes empty blocks whose terminator is just a `Jump` by merging them with the block they
     /// are jumping to.
     pub fn prune_empty_blocks_mut(&mut self) -> () {
-
         // Keys are labels corresponding to empty basic blocks with a jump terminator, values are
         // the labels they jump to (and can hopefully be replaced by).
-        let mut proposed_rewrites: HashMap<Lbl, Lbl> = self.nodes
+        let mut proposed_rewrites: HashMap<Lbl, Lbl> = self
+            .nodes
             .iter()
             .filter_map(|(lbl, bb)| Cfg::empty_bb(bb).map(|tgt| (*lbl, tgt)))
             .collect();
@@ -620,7 +692,7 @@ impl<Lbl: Copy + Ord + Hash, Stmt> Cfg<Lbl, Stmt> {
         // basic block corresponding to the value.
         let mut actual_rewrites: HashMap<Lbl, Lbl> = HashMap::new();
 
-        while let Some((from, to)) = proposed_rewrites.iter().map(|(f,t)| (*f,*t)).next() {
+        while let Some((from, to)) = proposed_rewrites.iter().map(|(f, t)| (*f, *t)).next() {
             proposed_rewrites.remove(&from);
             let mut from_any: HashSet<Lbl> = vec![from].into_iter().collect();
 
@@ -649,13 +721,15 @@ impl<Lbl: Copy + Ord + Hash, Stmt> Cfg<Lbl, Stmt> {
         }
 
         // Apply the remaps to the entries
-        self.entries = self.entries
+        self.entries = self
+            .entries
             .iter()
             .map(|entry| *actual_rewrites.get(entry).unwrap_or(entry))
             .collect();
 
         // We keep only the basic blocks that weren't remapped to anything.
-        self.nodes.retain(|lbl, _| actual_rewrites.get(lbl).is_none());
+        self.nodes
+            .retain(|lbl, _| actual_rewrites.get(lbl).is_none());
 
         // However, those block we do keep, we remap the labels in their terminators.
         for bb in self.nodes.values_mut() {
@@ -672,7 +746,7 @@ impl<Lbl: Copy + Ord + Hash, Stmt> Cfg<Lbl, Stmt> {
 
     /// Given an empty `BasicBlock` that ends in a `Jump`, return the target label. In all other
     /// cases, return `None`.
-    fn empty_bb(bb: &BasicBlock<Lbl,Stmt>) -> Option<Lbl> {
+    fn empty_bb(bb: &BasicBlock<Lbl, Stmt>) -> Option<Lbl> {
         match bb.terminator {
             Jump(lbl) if bb.body.is_empty() => Some(lbl),
             _ => None,
@@ -684,9 +758,8 @@ impl<Lbl: Copy + Ord + Hash, Stmt> Cfg<Lbl, Stmt> {
 /// the graph is constructed, we only really care about the 'graph' field.
 #[derive(Clone, Debug)]
 struct CfgBuilder {
-
     /// Identifies the 'BasicBlock' to start with in 'graph'
-    graph: Cfg<Label,StmtOrDecl>,
+    graph: Cfg<Label, StmtOrDecl>,
 
     /// Variables in scope right before the current statement. The wrapping `Vec` witnesses the
     /// notion of scope: later elements in the vector are always supersets of earlier elements.
@@ -694,9 +767,7 @@ struct CfgBuilder {
     /// Information about all of the C declarations we have seen so far.
     decls_seen: DeclStmtStore,
 
-
     // Book-keeping information for translating switch statements
-
     /// Stack of labels identifying what a 'break' should jump to. We push onto this stack when
     /// entering a construct that can break and pop when exiting that construct.
     break_labels: Vec<Label>,
@@ -706,17 +777,13 @@ struct CfgBuilder {
     /// body of a 'switch'.
     switch_expr_cases: Vec<SwitchCases>,
 
-
     // Fresh ID sources
-
     /// Source for generating fresh synthetic labels
     prev_label: u64,
     /// Source for generating fresh loop IDs
     prev_loop_id: u64,
 
-
     // Information for filtering out invalid CFGs
-
     /// Information about all of the C labels we have seen defined so far
     c_labels_defined: HashSet<CLabelId>,
     /// Information about all of the C labels we have seen used so far
@@ -724,9 +791,7 @@ struct CfgBuilder {
     /// Are we allowed to translate `return` statements here?
     c_return_permitted: bool,
 
-
     // Book-keeping information to build up the `loops` and `multiples` fields in `graph`.
-
     /// Loops we are currently in. Every time we enter a loop, we push a new vector onto this field.
     /// When we exit that loop, we pop the vector, add all the labels to the next entry in the
     /// `Vec`, and also add the loop to the CFG.
@@ -744,7 +809,7 @@ struct CfgBuilder {
 /// choosing what to do until later.
 #[derive(Clone, Debug)]
 pub struct DeclStmtStore {
-    store: HashMap<CDeclId, DeclStmtInfo>
+    store: HashMap<CDeclId, DeclStmtInfo>,
 }
 
 /// This contains the information one needs to convert a C declaration in all the possible ways:
@@ -766,11 +831,7 @@ pub struct DeclStmtInfo {
 }
 
 impl DeclStmtInfo {
-    pub fn new(
-        decl: Vec<Stmt>,
-        assign: Vec<Stmt>,
-        decl_and_assign: Vec<Stmt>,
-    ) -> Self {
+    pub fn new(decl: Vec<Stmt>, assign: Vec<Stmt>, decl_and_assign: Vec<Stmt>) -> Self {
         DeclStmtInfo {
             decl: Some(decl),
             assign: Some(assign),
@@ -780,37 +841,54 @@ impl DeclStmtInfo {
 }
 
 impl DeclStmtStore {
-
     pub fn new() -> Self {
-        DeclStmtStore { store: HashMap::new() }
+        DeclStmtStore {
+            store: HashMap::new(),
+        }
     }
 
     /// Extract _just_ the Rust statements for a declaration (without initialization). Used when you
     /// want to move just a declaration to a larger scope.
     pub fn extract_decl(&mut self, decl_id: CDeclId) -> Result<Vec<Stmt>, String> {
-        let DeclStmtInfo { decl, assign, .. } = self.store
-            .remove(&decl_id)
-            .ok_or(format!("Cannot find information on declaration {:?}", decl_id))?;
+        let DeclStmtInfo { decl, assign, .. } = self.store.remove(&decl_id).ok_or(format!(
+            "Cannot find information on declaration {:?}",
+            decl_id
+        ))?;
 
-        let decl: Vec<Stmt> = decl.ok_or(format!("Declaration for {:?} has already been extracted", decl_id))?;
+        let decl: Vec<Stmt> = decl.ok_or(format!(
+            "Declaration for {:?} has already been extracted",
+            decl_id
+        ))?;
 
-        let pruned = DeclStmtInfo { decl: None, assign, decl_and_assign: None };
+        let pruned = DeclStmtInfo {
+            decl: None,
+            assign,
+            decl_and_assign: None,
+        };
         self.store.insert(decl_id, pruned);
 
         Ok(decl)
     }
 
-   /// Extract _just_ the Rust statements for an initializer (without the declaration it was
-   /// initially attached to). Used when you've moved a declaration but now you need to also run the
-   /// initializer.
+    /// Extract _just_ the Rust statements for an initializer (without the declaration it was
+    /// initially attached to). Used when you've moved a declaration but now you need to also run the
+    /// initializer.
     pub fn extract_assign(&mut self, decl_id: CDeclId) -> Result<Vec<Stmt>, String> {
-        let DeclStmtInfo { decl, assign, .. } = self.store
-            .remove(&decl_id)
-            .ok_or(format!("Cannot find information on declaration {:?}", decl_id))?;
+        let DeclStmtInfo { decl, assign, .. } = self.store.remove(&decl_id).ok_or(format!(
+            "Cannot find information on declaration {:?}",
+            decl_id
+        ))?;
 
-        let assign: Vec<Stmt> = assign.ok_or(format!("Assignment for {:?} has already been extracted", decl_id))?;
+        let assign: Vec<Stmt> = assign.ok_or(format!(
+            "Assignment for {:?} has already been extracted",
+            decl_id
+        ))?;
 
-        let pruned = DeclStmtInfo { decl, assign: None, decl_and_assign: None };
+        let pruned = DeclStmtInfo {
+            decl,
+            assign: None,
+            decl_and_assign: None,
+        };
         self.store.insert(decl_id, pruned);
 
         Ok(assign)
@@ -819,13 +897,23 @@ impl DeclStmtStore {
     /// Extract the Rust statements for the full declaration and initializers. Used for when you
     /// didn't need to move a declaration at all.
     pub fn extract_decl_and_assign(&mut self, decl_id: CDeclId) -> Result<Vec<Stmt>, String> {
-        let DeclStmtInfo { decl_and_assign, .. } = self.store
-            .remove(&decl_id)
-            .ok_or(format!("Cannot find information on declaration {:?}", decl_id))?;
+        let DeclStmtInfo {
+            decl_and_assign, ..
+        } = self.store.remove(&decl_id).ok_or(format!(
+            "Cannot find information on declaration {:?}",
+            decl_id
+        ))?;
 
-        let decl_and_assign: Vec<Stmt> = decl_and_assign.ok_or(format!("Declaration with assignment for {:?} has already been extracted", decl_id))?;
+        let decl_and_assign: Vec<Stmt> = decl_and_assign.ok_or(format!(
+            "Declaration with assignment for {:?} has already been extracted",
+            decl_id
+        ))?;
 
-        let pruned = DeclStmtInfo { decl: None, assign: None, decl_and_assign: None };
+        let pruned = DeclStmtInfo {
+            decl: None,
+            assign: None,
+            decl_and_assign: None,
+        };
         self.store.insert(decl_id, pruned);
 
         Ok(decl_and_assign)
@@ -833,11 +921,18 @@ impl DeclStmtStore {
 
     /// Extract the Rust statements for the full declaration and initializers. DEBUGGING ONLY.
     pub fn peek_decl_and_assign(&self, decl_id: CDeclId) -> Result<Vec<Stmt>, String> {
-        let &DeclStmtInfo { ref decl_and_assign, .. } = self.store
-            .get(&decl_id)
-            .ok_or(format!("Cannot find information on declaration {:?}", decl_id))?;
+        let &DeclStmtInfo {
+            ref decl_and_assign,
+            ..
+        } = self.store.get(&decl_id).ok_or(format!(
+            "Cannot find information on declaration {:?}",
+            decl_id
+        ))?;
 
-        let decl_and_assign: Vec<Stmt> = decl_and_assign.clone().ok_or(format!("Declaration with assignment for {:?} has already been extracted", decl_id))?;
+        let decl_and_assign: Vec<Stmt> = decl_and_assign.clone().ok_or(format!(
+            "Declaration with assignment for {:?} has already been extracted",
+            decl_id
+        ))?;
 
         Ok(decl_and_assign)
     }
@@ -884,10 +979,10 @@ impl WipBlock {
 
 /// This impl block deals with creating control flow graphs
 impl CfgBuilder {
-
     /// Add a basic block to the control flow graph, specifying under which label to insert it.
-    fn add_block(&mut self, lbl: Label, bb: BasicBlock<Label,StmtOrDecl>) -> () {
-        let currently_live = self.currently_live
+    fn add_block(&mut self, lbl: Label, bb: BasicBlock<Label, StmtOrDecl>) -> () {
+        let currently_live = self
+            .currently_live
             .last_mut()
             .expect("Found no live currently live scope");
 
@@ -896,19 +991,36 @@ impl CfgBuilder {
         }
 
         match self.graph.nodes.insert(lbl, bb) {
-            None => { },
+            None => {}
             Some(_) => panic!("Label {:?} cannot identify two basic blocks", lbl),
         }
 
-        self.loops.last_mut().map(|&mut (_, ref mut loop_vec)| loop_vec.push(lbl));
-        self.multiples.last_mut().map(|&mut (_, ref mut arm_vec)| arm_vec.push(lbl));
+        self.loops
+            .last_mut()
+            .map(|&mut (_, ref mut loop_vec)| loop_vec.push(lbl));
+        self.multiples
+            .last_mut()
+            .map(|&mut (_, ref mut arm_vec)| arm_vec.push(lbl));
     }
 
     /// Create a basic block from a WIP block by tacking on the right terminator. Once this is done,
     /// add the block into the graph.
     fn add_wip_block(&mut self, wip: WipBlock, terminator: GenTerminator<Label>) -> () {
-        let WipBlock { label, body, defined, live } = wip;
-        self.add_block(label, BasicBlock { body, terminator, defined, live });
+        let WipBlock {
+            label,
+            body,
+            defined,
+            live,
+        } = wip;
+        self.add_block(
+            label,
+            BasicBlock {
+                body,
+                terminator,
+                defined,
+                live,
+            },
+        );
     }
 
     /// Update the terminator of an existing block. This is for the special cases where you don't
@@ -929,12 +1041,16 @@ impl CfgBuilder {
     /// Close a loop
     fn close_loop(&mut self) -> () {
         let (loop_id, loop_contents) = self.loops.pop().expect("No loop to close.");
-        let outer_loop_id: Option<LoopId> = self.loops.last().map(|&(i,_)| i);
+        let outer_loop_id: Option<LoopId> = self.loops.last().map(|&(i, _)| i);
 
         // Add the loop contents to the outer loop (if there is one)
-        self.loops.last_mut().map(|&mut (_, ref mut outer_loop)| outer_loop.extend(loop_contents.iter()));
+        self.loops
+            .last_mut()
+            .map(|&mut (_, ref mut outer_loop)| outer_loop.extend(loop_contents.iter()));
 
-        self.graph.loops.add_loop(loop_id, loop_contents.into_iter().collect(), outer_loop_id);
+        self.graph
+            .loops
+            .add_loop(loop_id, loop_contents.into_iter().collect(), outer_loop_id);
     }
 
     /// Open an arm
@@ -947,15 +1063,20 @@ impl CfgBuilder {
         let (arm_start, arm_contents) = self.multiples.pop().expect("No arm to close.");
 
         // Add the arm contents to the outer arm (if there is one)
-        self.multiples.last_mut().map(|&mut (_, ref mut outer_arm)| outer_arm.extend(arm_contents.iter()));
+        self.multiples
+            .last_mut()
+            .map(|&mut (_, ref mut outer_arm)| outer_arm.extend(arm_contents.iter()));
 
         (arm_start, arm_contents.into_iter().collect())
     }
 
     /// REMARK: make sure that basic blocks are constructed either entirely inside or entirely
     ///         outside `with_scope`. Otherwise, the scope of the block is going to be confused.
-    fn with_scope<B, F: FnOnce(&mut Self) -> B>(&mut self, _translator: &Translation, cont: F) -> B {
-
+    fn with_scope<B, F: FnOnce(&mut Self) -> B>(
+        &mut self,
+        _translator: &Translation,
+        cont: F,
+    ) -> B {
         // Open a new scope
         let new_vars = self.current_variables();
         self.currently_live.push(new_vars);
@@ -1034,10 +1155,9 @@ impl CfgBuilder {
     fn convert_stmts_help(
         &mut self,
         translator: &Translation,
-        stmt_ids: &[CStmtId],     // C statements to translate
-        wip: WipBlock,            // Current WIP block
+        stmt_ids: &[CStmtId], // C statements to translate
+        wip: WipBlock,        // Current WIP block
     ) -> Result<Option<WipBlock>, String> {
-
         // Close off our WIP (it is important this happen _outside_ the `with_scope` call)
         let compound_entry = self.fresh_label();
         self.add_wip_block(wip, Jump(compound_entry));
@@ -1063,7 +1183,6 @@ impl CfgBuilder {
         }))
     }
 
-
     /// Translate a C statement and tack it onto the end of the `WipBlock` passed in. If necessary,
     /// intermediate basic blocks can be outputted to the control flow graph.
     ///
@@ -1079,12 +1198,15 @@ impl CfgBuilder {
     fn convert_stmt_help(
         &mut self,
         translator: &Translation,
-        stmt_id: CStmtId,         // C statement to translate
-        mut wip: WipBlock,        // Current WIP block
+        stmt_id: CStmtId,  // C statement to translate
+        mut wip: WipBlock, // Current WIP block
     ) -> Result<Option<WipBlock>, String> {
-
         // Add statement comment into current block right before the current statement
-        for cmmt in translator.comment_context.borrow_mut().remove_stmt_comment(stmt_id) {
+        for cmmt in translator
+            .comment_context
+            .borrow_mut()
+            .remove_stmt_comment(stmt_id)
+        {
             wip.push_comment(cmmt);
         }
 
@@ -1097,7 +1219,11 @@ impl CfgBuilder {
                     self.decls_seen.store.insert(*decl, info);
 
                     // Add declaration comment into current block right before the declaration
-                    for cmmt in translator.comment_context.borrow_mut().remove_decl_comment(*decl) {
+                    for cmmt in translator
+                        .comment_context
+                        .borrow_mut()
+                        .remove_decl_comment(*decl)
+                    {
                         wip.push_comment(cmmt);
                     }
 
@@ -1112,12 +1238,17 @@ impl CfgBuilder {
                 stmt_id,
             )),
             CStmtKind::Return(expr) => {
-                let val = match expr.map(|i| translator.convert_expr(ExprUse::RValue, i, false, DecayRef::Default)) {
+                let val = match expr
+                    .map(|i| translator.convert_expr(ExprUse::RValue, i, false, DecayRef::Default))
+                {
                     Some(r) => Some(r?),
                     None => None,
                 };
 
-                let WithStmts { stmts, val: ret_val } = with_stmts_opt(val);
+                let WithStmts {
+                    stmts,
+                    val: ret_val,
+                } = with_stmts_opt(val);
                 wip.extend(stmts);
                 wip.push_stmt(mk().expr_stmt(mk().return_expr(ret_val)));
 
@@ -1126,13 +1257,22 @@ impl CfgBuilder {
                 Ok(None)
             }
 
-            CStmtKind::If { scrutinee, true_variant, false_variant } => {
+            CStmtKind::If {
+                scrutinee,
+                true_variant,
+                false_variant,
+            } => {
                 let next_entry = self.fresh_label();
                 let then_entry = self.fresh_label();
-                let else_entry = if false_variant.is_none() { next_entry } else { self.fresh_label() };
+                let else_entry = if false_variant.is_none() {
+                    next_entry
+                } else {
+                    self.fresh_label()
+                };
 
                 // Condition
-                let WithStmts { stmts, val } = translator.convert_condition(true, scrutinee, false)?;
+                let WithStmts { stmts, val } =
+                    translator.convert_condition(true, scrutinee, false)?;
                 let cond_val = translator.ast_context[scrutinee].kind.get_bool();
                 wip.extend(stmts);
                 self.add_wip_block(
@@ -1140,10 +1280,9 @@ impl CfgBuilder {
                     match cond_val {
                         Some(true) => Jump(then_entry),
                         Some(false) => Jump(else_entry),
-                        None => Branch(val, then_entry, else_entry)
+                        None => Branch(val, then_entry, else_entry),
                     },
                 );
-
 
                 // Then case
                 self.open_arm(then_entry);
@@ -1165,13 +1304,18 @@ impl CfgBuilder {
                 };
                 let else_arm = self.close_arm();
 
-                self.graph.multiples.add_multiple(next_entry, vec![then_arm, else_arm]);
+                self.graph
+                    .multiples
+                    .add_multiple(next_entry, vec![then_arm, else_arm]);
 
                 // Return
                 Ok(Some(self.new_wip_block(next_entry)))
             }
 
-            CStmtKind::While { condition, body: body_stmt } => {
+            CStmtKind::While {
+                condition,
+                body: body_stmt,
+            } => {
                 let cond_entry = self.fresh_label();
                 let body_entry = self.fresh_label();
                 let next_entry = self.fresh_label();
@@ -1180,7 +1324,8 @@ impl CfgBuilder {
                 self.open_loop();
 
                 // Condition
-                let WithStmts { stmts, val } = translator.convert_condition(true, condition, false)?;
+                let WithStmts { stmts, val } =
+                    translator.convert_condition(true, condition, false)?;
                 let cond_val = translator.ast_context[condition].kind.get_bool();
                 let mut cond_wip = self.new_wip_block(cond_entry);
                 cond_wip.extend(stmts);
@@ -1189,7 +1334,7 @@ impl CfgBuilder {
                     match cond_val {
                         Some(true) => Jump(body_entry),
                         Some(false) => Jump(next_entry),
-                        None => Branch(val, body_entry, next_entry)
+                        None => Branch(val, body_entry, next_entry),
                     },
                 );
 
@@ -1211,7 +1356,10 @@ impl CfgBuilder {
                 Ok(Some(self.new_wip_block(next_entry)))
             }
 
-            CStmtKind::DoWhile { body: body_stmt, condition } => {
+            CStmtKind::DoWhile {
+                body: body_stmt,
+                condition,
+            } => {
                 let body_entry = self.fresh_label();
                 let cond_entry = self.fresh_label();
                 let next_entry = self.fresh_label();
@@ -1233,7 +1381,8 @@ impl CfgBuilder {
                 self.continue_labels.pop();
 
                 // Condition
-                let WithStmts { stmts, val } = translator.convert_condition(true, condition, false)?;
+                let WithStmts { stmts, val } =
+                    translator.convert_condition(true, condition, false)?;
                 let cond_val = translator.ast_context[condition].kind.get_bool();
                 let mut cond_wip = self.new_wip_block(cond_entry);
                 cond_wip.extend(stmts);
@@ -1252,7 +1401,12 @@ impl CfgBuilder {
                 Ok(Some(self.new_wip_block(next_entry)))
             }
 
-            CStmtKind::ForLoop { init, condition, increment, body } => {
+            CStmtKind::ForLoop {
+                init,
+                condition,
+                increment,
+                body,
+            } => {
                 let for_entry = self.fresh_label();
                 let cond_entry = self.fresh_label();
                 let body_entry = self.fresh_label();
@@ -1277,7 +1431,8 @@ impl CfgBuilder {
 
                     // Condition
                     if let Some(cond) = condition {
-                        let WithStmts { stmts, val } = translator.convert_condition(true, cond, false)?;
+                        let WithStmts { stmts, val } =
+                            translator.convert_condition(true, cond, false)?;
                         let cond_val = translator.ast_context[cond].kind.get_bool();
                         let mut cond_wip = slf.new_wip_block(cond_entry);
                         cond_wip.extend(stmts);
@@ -1301,7 +1456,7 @@ impl CfgBuilder {
                     let body_stuff = slf.convert_stmt_help(translator, body, body_wip)?;
 
                     if let Some(wip_body) = body_stuff {
-                      slf.add_wip_block(wip_body, Jump(incr_entry));
+                        slf.add_wip_block(wip_body, Jump(incr_entry));
                     }
 
                     slf.break_labels.pop();
@@ -1311,12 +1466,12 @@ impl CfgBuilder {
                     match increment {
                         None => slf.add_block(incr_entry, BasicBlock::new_jump(cond_entry)),
                         Some(incr) => {
-                          let incr_stmts = translator
-                                  .convert_expr(ExprUse::Unused, incr, false, DecayRef::Default)?
-                                  .stmts;
-                          let mut incr_wip = slf.new_wip_block(incr_entry);
-                          incr_wip.extend(incr_stmts);
-                          slf.add_wip_block(incr_wip, Jump(cond_entry));
+                            let incr_stmts = translator
+                                .convert_expr(ExprUse::Unused, incr, false, DecayRef::Default)?
+                                .stmts;
+                            let mut incr_wip = slf.new_wip_block(incr_entry);
+                            incr_wip.extend(incr_stmts);
+                            slf.add_wip_block(incr_wip, Jump(cond_entry));
                         }
                     }
 
@@ -1327,7 +1482,7 @@ impl CfgBuilder {
 
                 // Return (it is important this happen _outside_ the `with_scope` call)
                 Ok(Some(self.new_wip_block(next_label)))
-            },
+            }
 
             CStmtKind::Label(sub_stmt) => {
                 let this_label = Label::FromC(stmt_id);
@@ -1347,14 +1502,16 @@ impl CfgBuilder {
                 Ok(None)
             }
 
-            CStmtKind::Compound(ref comp_stmts) => self.convert_stmts_help(
-                translator,
-                comp_stmts.as_slice(),
-                wip
-            ),
+            CStmtKind::Compound(ref comp_stmts) => {
+                self.convert_stmts_help(translator, comp_stmts.as_slice(), wip)
+            }
 
             CStmtKind::Expr(expr) => {
-                wip.extend(translator.convert_expr(ExprUse::Unused, expr, false, DecayRef::Default)?.stmts);
+                wip.extend(
+                    translator
+                        .convert_expr(ExprUse::Unused, expr, false, DecayRef::Default)?
+                        .stmts,
+                );
 
                 // If we can tell the expression is going to diverge, there is no falling through to
                 // the next block.
@@ -1394,17 +1551,18 @@ impl CfgBuilder {
 
                 // Case
                 let branch = match cie {
-                    ConstIntExpr::U(n) =>
-                        mk().lit_expr(mk().int_lit(n as u128, LitIntType::Unsuffixed)),
+                    ConstIntExpr::U(n) => {
+                        mk().lit_expr(mk().int_lit(n as u128, LitIntType::Unsuffixed))
+                    }
 
-                    ConstIntExpr::I(n) if n >= 0 =>
-                        mk().lit_expr(mk().int_lit(n as u128, LitIntType::Unsuffixed)),
+                    ConstIntExpr::I(n) if n >= 0 => {
+                        mk().lit_expr(mk().int_lit(n as u128, LitIntType::Unsuffixed))
+                    }
 
-                    ConstIntExpr::I(n) =>
-                        mk().unary_expr(
-                            syntax::ast::UnOp::Neg,
-                            mk().lit_expr(mk().int_lit((-n) as u128, LitIntType::Unsuffixed))
-                        ),
+                    ConstIntExpr::I(n) => mk().unary_expr(
+                        syntax::ast::UnOp::Neg,
+                        mk().lit_expr(mk().int_lit((-n) as u128, LitIntType::Unsuffixed)),
+                    ),
                 };
                 self.switch_expr_cases
                     .last_mut()
@@ -1436,12 +1594,16 @@ impl CfgBuilder {
                 self.convert_stmt_help(translator, sub_stmt, sub_stmt_wip)
             }
 
-            CStmtKind::Switch { scrutinee, body: switch_body } => {
+            CStmtKind::Switch {
+                scrutinee,
+                body: switch_body,
+            } => {
                 let next_label = self.fresh_label();
                 let body_label = self.fresh_label();
 
                 // Convert the condition
-                let WithStmts { stmts, val } = translator.convert_expr(ExprUse::RValue, scrutinee, false, DecayRef::Default)?;
+                let WithStmts { stmts, val } =
+                    translator.convert_expr(ExprUse::RValue, scrutinee, false, DecayRef::Default)?;
                 wip.extend(stmts);
 
                 let wip_label = wip.label;
@@ -1458,13 +1620,20 @@ impl CfgBuilder {
                 }
 
                 self.break_labels.pop();
-                let switch_case = self.switch_expr_cases.pop().expect("No 'SwitchCases' to pop");
+                let switch_case = self
+                    .switch_expr_cases
+                    .pop()
+                    .expect("No 'SwitchCases' to pop");
 
-                let mut cases: Vec<_> = switch_case.cases
+                let mut cases: Vec<_> = switch_case
+                    .cases
                     .into_iter()
-                    .map(|(p,lbl)| (vec![p],lbl))
+                    .map(|(p, lbl)| (vec![p], lbl))
                     .collect();
-                cases.push((vec![mk().wild_pat()], switch_case.default.unwrap_or(next_label)));
+                cases.push((
+                    vec![mk().wild_pat()],
+                    switch_case.default.unwrap_or(next_label),
+                ));
 
                 // Add the condition basic block terminator (we need the information built up during
                 // the conversion of the body to make the right terminator)
@@ -1474,14 +1643,26 @@ impl CfgBuilder {
                 Ok(Some(self.new_wip_block(next_label)))
             }
 
-            CStmtKind::Asm { is_volatile, ref asm, ref inputs, ref outputs, ref clobbers } => {
-                wip.extend(translator.convert_asm(DUMMY_SP, is_volatile, asm, inputs, outputs, clobbers)?);
+            CStmtKind::Asm {
+                is_volatile,
+                ref asm,
+                ref inputs,
+                ref outputs,
+                ref clobbers,
+            } => {
+                wip.extend(translator.convert_asm(
+                    DUMMY_SP,
+                    is_volatile,
+                    asm,
+                    inputs,
+                    outputs,
+                    clobbers,
+                )?);
                 Ok(Some(wip))
             }
         }
     }
 }
-
 
 /// This impl block deals with pretty-printing control flow graphs into a format that `dot` can
 /// consume. Compiling these files into images means running something like:
@@ -1489,13 +1670,8 @@ impl CfgBuilder {
 /// ```norun
 /// dot -Tpng cfg_func.dot > cfg_func.png
 /// ```
-impl Cfg<Label,StmtOrDecl> {
-
-    pub fn dump_json_graph(
-        &self,
-        store: &DeclStmtStore,
-        file_path: String,
-    ) -> io::Result<()> {
+impl Cfg<Label, StmtOrDecl> {
+    pub fn dump_json_graph(&self, store: &DeclStmtStore, file_path: String) -> io::Result<()> {
         let cfg_mapped = self.map_stmts(|sd: &StmtOrDecl| -> Vec<String> { sd.to_string(store) });
 
         let file = File::create(file_path)?;
@@ -1512,13 +1688,15 @@ impl Cfg<Label,StmtOrDecl> {
         show_loops: bool,
         file_path: String,
     ) -> io::Result<()> {
-
         // Utility function for sanitizing strings
         fn sanitize_label(lbl: String) -> String {
-            format!("{}\\l", lbl.replace("\t", "  ")
-                                .replace("\\", "\\\\")
-                                .replace("\"", "\\\"")
-                                .replace("\n", "\\l"))
+            format!(
+                "{}\\l",
+                lbl.replace("\t", "  ")
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\l")
+            )
         }
 
         let mut file = File::create(file_path)?;
@@ -1534,11 +1712,10 @@ impl Cfg<Label,StmtOrDecl> {
 
         // Rest of graph
         for (lbl, bb) in self.nodes.iter() {
-
             let pretty_terminator = match bb.terminator {
                 End | Jump(_) => String::from(""),
-                Branch(ref cond, _, _) => format!("\n{}",pprust::expr_to_string(cond.deref())),
-                Switch { ref expr, .. } => format!("\n{}",pprust::expr_to_string(expr.deref())),
+                Branch(ref cond, _, _) => format!("\n{}", pprust::expr_to_string(cond.deref())),
+                Switch { ref expr, .. } => format!("\n{}", pprust::expr_to_string(expr.deref())),
             };
 
             let defined = if bb.defined.is_empty() {
@@ -1579,9 +1756,9 @@ impl Cfg<Label,StmtOrDecl> {
                 closing_braces = loop_ids.len();
                 for loop_id in loop_ids.iter().rev() {
                     file.write_fmt(format_args!(
-                    "subgraph cluster_{} {{ label = \"{}\"; graph[style=dotted];",
-                    loop_id.pretty_print(),
-                    loop_id.pretty_print(),
+                        "subgraph cluster_{} {{ label = \"{}\"; graph[style=dotted];",
+                        loop_id.pretty_print(),
+                        loop_id.pretty_print(),
                     ))?;
                 }
             }
@@ -1592,17 +1769,25 @@ impl Cfg<Label,StmtOrDecl> {
                 lbl.debug_print(),
                 lbl.debug_print(),
                 if show_liveness { live } else { String::new() },
-                if show_liveness { defined } else { String::new() },
-                format!("-----\\l{}", if bb.body.is_empty() {
-                    String::from("")
+                if show_liveness {
+                    defined
                 } else {
-                    sanitize_label(bb.body
-                        .iter()
-                        .flat_map(|sd: &StmtOrDecl| -> Vec<String> { sd.to_string(store) })
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                    )
-                }),
+                    String::new()
+                },
+                format!(
+                    "-----\\l{}",
+                    if bb.body.is_empty() {
+                        String::from("")
+                    } else {
+                        sanitize_label(
+                            bb.body
+                                .iter()
+                                .flat_map(|sd: &StmtOrDecl| -> Vec<String> { sd.to_string(store) })
+                                .collect::<Vec<String>>()
+                                .join("\n"),
+                        )
+                    }
+                ),
                 sanitize_label(pretty_terminator),
             ))?;
 
@@ -1617,11 +1802,10 @@ impl Cfg<Label,StmtOrDecl> {
             // All the edges starting from this node
             let edges: Vec<(String, Label)> = match bb.terminator {
                 End => vec![],
-                Jump(tgt) => vec![(String::from(""),tgt)],
-                Branch(_, tru, fal) => vec![
-                    (String::from("true"),tru),
-                    (String::from("false"),fal)
-                ],
+                Jump(tgt) => vec![(String::from(""), tgt)],
+                Branch(_, tru, fal) => {
+                    vec![(String::from("true"), tru), (String::from("false"), fal)]
+                }
                 Switch { ref cases, .. } => {
                     let mut cases: Vec<(String, Label)> = cases
                         .iter()
@@ -1635,10 +1819,10 @@ impl Cfg<Label,StmtOrDecl> {
                         })
                         .collect();
                     cases
-                },
+                }
             };
 
-            for (desc,tgt) in edges {
+            for (desc, tgt) in edges {
                 file.write_fmt(format_args!(
                     "  {} -> {} [label=\"{}\"];\n",
                     lbl.debug_print(),

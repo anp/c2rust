@@ -1,5 +1,5 @@
-use std::collections::{HashMap,HashSet,BTreeMap};
 use indexmap::IndexMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Index;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Copy, Clone)]
@@ -15,21 +15,21 @@ pub struct CDeclId(pub u64);
 pub struct CStmtId(pub u64);
 
 // These are references into particular variants of AST nodes
-pub type CLabelId = CStmtId;  // Labels point into the 'StmtKind::Label' that declared the label
-pub type CFieldId = CDeclId;  // Records always contain 'DeclKind::Field's
-pub type CParamId = CDeclId;  // Parameters always contain 'DeclKind::Variable's
-pub type CFuncTypeId = CTypeId;  // Function declarations always have types which are 'TypeKind::Function'
-pub type CRecordId = CDeclId;  // Record types need to point to 'DeclKind::Record'
-pub type CTypedefId = CDeclId;  // Typedef types need to point to 'DeclKind::Typedef'
-pub type CEnumId = CDeclId;  // Enum types need to point to 'DeclKind::Enum'
-pub type CEnumConstantId = CDeclId;  // Enum's need to point to child 'DeclKind::EnumConstant's
+pub type CLabelId = CStmtId; // Labels point into the 'StmtKind::Label' that declared the label
+pub type CFieldId = CDeclId; // Records always contain 'DeclKind::Field's
+pub type CParamId = CDeclId; // Parameters always contain 'DeclKind::Variable's
+pub type CFuncTypeId = CTypeId; // Function declarations always have types which are 'TypeKind::Function'
+pub type CRecordId = CDeclId; // Record types need to point to 'DeclKind::Record'
+pub type CTypedefId = CDeclId; // Typedef types need to point to 'DeclKind::Typedef'
+pub type CEnumId = CDeclId; // Enum types need to point to 'DeclKind::Enum'
+pub type CEnumConstantId = CDeclId; // Enum's need to point to child 'DeclKind::EnumConstant's
 
 pub use self::conversion::*;
 pub use self::print::Printer;
 
 mod conversion;
-mod print;
 pub mod iterators;
+mod print;
 
 /// AST context containing all of the nodes in the Clang AST
 #[derive(Debug, Clone)]
@@ -76,12 +76,13 @@ impl TypedAstContext {
 
     pub fn is_null_expr(&self, expr_id: CExprId) -> bool {
         match self[expr_id].kind {
-            CExprKind::ExplicitCast(_, _, CastKind::NullToPointer, _) |
-            CExprKind::ImplicitCast(_, _, CastKind::NullToPointer, _) => true,
+            CExprKind::ExplicitCast(_, _, CastKind::NullToPointer, _)
+            | CExprKind::ImplicitCast(_, _, CastKind::NullToPointer, _) => true,
 
-            CExprKind::ExplicitCast(ty, e, CastKind::BitCast, _) |
-            CExprKind::ImplicitCast(ty, e, CastKind::BitCast, _) =>
-                self.resolve_type(ty.ctype).kind.is_pointer() && self.is_null_expr(e),
+            CExprKind::ExplicitCast(ty, e, CastKind::BitCast, _)
+            | CExprKind::ImplicitCast(ty, e, CastKind::BitCast, _) => {
+                self.resolve_type(ty.ctype).kind.is_pointer() && self.is_null_expr(e)
+            }
 
             _ => false,
         }
@@ -92,14 +93,15 @@ impl TypedAstContext {
     /// the targets of pointers
     pub fn is_forward_declared_type(&self, typ: CTypeId) -> bool {
         match self.resolve_type(typ).kind.as_underlying_decl() {
-            Some(decl_id) => {
-                match self[decl_id].kind {
-                    CDeclKind::Struct { fields: None, .. } => true,
-                    CDeclKind::Union { fields: None, .. } => true,
-                    CDeclKind::Enum { integral_type: None, .. } => true,
-                    _ => false,
-                }
-            }
+            Some(decl_id) => match self[decl_id].kind {
+                CDeclKind::Struct { fields: None, .. } => true,
+                CDeclKind::Union { fields: None, .. } => true,
+                CDeclKind::Enum {
+                    integral_type: None,
+                    ..
+                } => true,
+                _ => false,
+            },
             _ => false,
         }
     }
@@ -110,8 +112,12 @@ impl TypedAstContext {
         if let CTypeKind::Pointer(p) = resolved_ctype.kind {
             if let CTypeKind::Function { .. } = self.resolve_type(p.ctype).kind {
                 true
-            } else { false }
-        } else { false }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
     pub fn resolve_type_id(&self, typ: CTypeId) -> CTypeId {
@@ -121,11 +127,9 @@ impl TypedAstContext {
             CTypeKind::Decayed(ty) => self.resolve_type_id(ty),
             CTypeKind::TypeOf(ty) => self.resolve_type_id(ty),
             CTypeKind::Paren(ty) => self.resolve_type_id(ty),
-            CTypeKind::Typedef(decl) => {
-                match self.index(decl).kind {
-                    CDeclKind::Typedef { typ: ty, .. } => self.resolve_type_id(ty.ctype),
-                    _ => panic!("Typedef decl did not point to a typedef"),
-                }
+            CTypeKind::Typedef(decl) => match self.index(decl).kind {
+                CDeclKind::Typedef { typ: ty, .. } => self.resolve_type_id(ty.ctype),
+                _ => panic!("Typedef decl did not point to a typedef"),
             },
             _ => typ,
         }
@@ -140,39 +144,47 @@ impl TypedAstContext {
     /// that it doesn't, return `false`.
     pub fn is_expr_pure(&self, expr: CExprId) -> bool {
         match self.index(expr).kind {
-            CExprKind::BadExpr |
-            CExprKind::ShuffleVector(..) |
-            CExprKind::ConvertVector(..) |
-            CExprKind::Call(_, _, _) |
-            CExprKind::Unary(_, UnOp::PreIncrement, _) |
-            CExprKind::Unary(_, UnOp::PostIncrement, _) |
-            CExprKind::Unary(_, UnOp::PreDecrement, _) |
-            CExprKind::Unary(_, UnOp::PostDecrement, _) |
-            CExprKind::Binary(_, BinOp::Assign, _, _, _, _) |
-            CExprKind::InitList { .. } |
-            CExprKind::ImplicitValueInit { .. } |
-            CExprKind::Predefined(_, _) |
-            CExprKind::Statements(..) => false, // TODO: more precision
+            CExprKind::BadExpr
+            | CExprKind::ShuffleVector(..)
+            | CExprKind::ConvertVector(..)
+            | CExprKind::Call(_, _, _)
+            | CExprKind::Unary(_, UnOp::PreIncrement, _)
+            | CExprKind::Unary(_, UnOp::PostIncrement, _)
+            | CExprKind::Unary(_, UnOp::PreDecrement, _)
+            | CExprKind::Unary(_, UnOp::PostDecrement, _)
+            | CExprKind::Binary(_, BinOp::Assign, _, _, _, _)
+            | CExprKind::InitList { .. }
+            | CExprKind::ImplicitValueInit { .. }
+            | CExprKind::Predefined(_, _)
+            | CExprKind::Statements(..) => false, // TODO: more precision
 
-            CExprKind::Literal(_, _) |
-            CExprKind::DeclRef(_, _) |
-            CExprKind::UnaryType(_, _, _, _) |
-            CExprKind::OffsetOf(..) => true,
+            CExprKind::Literal(_, _)
+            | CExprKind::DeclRef(_, _)
+            | CExprKind::UnaryType(_, _, _, _)
+            | CExprKind::OffsetOf(..) => true,
 
-            CExprKind::DesignatedInitExpr(_,_,e) |
-            CExprKind::ImplicitCast(_, e, _, _) |
-            CExprKind::ExplicitCast(_, e, _, _) |
-            CExprKind::Member(_, e, _, _) |
-            CExprKind::CompoundLiteral(_, e) |
-            CExprKind::VAArg(_, e) |
-            CExprKind::Unary(_, _, e) => self.is_expr_pure(e),
+            CExprKind::DesignatedInitExpr(_, _, e)
+            | CExprKind::ImplicitCast(_, e, _, _)
+            | CExprKind::ExplicitCast(_, e, _, _)
+            | CExprKind::Member(_, e, _, _)
+            | CExprKind::CompoundLiteral(_, e)
+            | CExprKind::VAArg(_, e)
+            | CExprKind::Unary(_, _, e) => self.is_expr_pure(e),
 
             CExprKind::Binary(_, op, _, _, _, _) if op.underlying_assignment().is_some() => false,
-            CExprKind::Binary(_, _, lhs, rhs, _, _) => self.is_expr_pure(lhs) && self.is_expr_pure(rhs),
+            CExprKind::Binary(_, _, lhs, rhs, _, _) => {
+                self.is_expr_pure(lhs) && self.is_expr_pure(rhs)
+            }
 
-            CExprKind::ArraySubscript(_, lhs, rhs) => self.is_expr_pure(lhs) && self.is_expr_pure(rhs),
-            CExprKind::Conditional(_, c, lhs, rhs) => self.is_expr_pure(c) && self.is_expr_pure(lhs) && self.is_expr_pure(rhs),
-            CExprKind::BinaryConditional(_, lhs, rhs) => self.is_expr_pure(lhs) && self.is_expr_pure(rhs),
+            CExprKind::ArraySubscript(_, lhs, rhs) => {
+                self.is_expr_pure(lhs) && self.is_expr_pure(rhs)
+            }
+            CExprKind::Conditional(_, c, lhs, rhs) => {
+                self.is_expr_pure(c) && self.is_expr_pure(lhs) && self.is_expr_pure(rhs)
+            }
+            CExprKind::BinaryConditional(_, lhs, rhs) => {
+                self.is_expr_pure(lhs) && self.is_expr_pure(rhs)
+            }
         }
     }
 
@@ -185,8 +197,8 @@ impl TypedAstContext {
         };
 
         let type_id = match self[func_id].kind.get_type() {
-                None => return false,
-                Some(t) => t,
+            None => return false,
+            Some(t) => t,
         };
         let pointed_id = match self.index(type_id).kind {
             CTypeKind::Pointer(pointer_qualtype) => pointer_qualtype.ctype,
@@ -199,7 +211,6 @@ impl TypedAstContext {
         }
     }
 
-
     pub fn prune_unused_decls(&mut self) {
         // Set of declarations that should be preserved
         let mut live: HashSet<CDeclId> = HashSet::new();
@@ -210,11 +221,15 @@ impl TypedAstContext {
         // All variable and function definitions are considered live
         for (&decl_id, decl) in &self.c_decls {
             match decl.kind {
-                CDeclKind::Function { typ, body: Some(_), .. } => {
+                CDeclKind::Function {
+                    typ, body: Some(_), ..
+                } => {
                     live.insert(decl_id);
                     type_queue.push(typ); // references the return type
                 }
-                CDeclKind::Variable { is_defn: true, .. } => { live.insert(decl_id); }
+                CDeclKind::Variable { is_defn: true, .. } => {
+                    live.insert(decl_id);
+                }
                 _ => {}
             }
         }
@@ -226,7 +241,10 @@ impl TypedAstContext {
                     match self.c_decls[decl_id].kind {
                         CDeclKind::Typedef { typ, .. } => type_queue.push(typ.ctype),
                         CDeclKind::Enum { ref variants, .. } => live.extend(variants),
-                        CDeclKind::Struct { fields: Some(ref arr), .. } => {
+                        CDeclKind::Struct {
+                            fields: Some(ref arr),
+                            ..
+                        } => {
                             live.extend(arr);
                             for &field_id in arr {
                                 if let CDeclKind::Field { typ, .. } = self[field_id].kind {
@@ -234,7 +252,10 @@ impl TypedAstContext {
                                 }
                             }
                         }
-                        CDeclKind::Union { fields: Some(ref arr), .. } => {
+                        CDeclKind::Union {
+                            fields: Some(ref arr),
+                            ..
+                        } => {
                             for &field_id in arr {
                                 live.insert(field_id);
                                 if let CDeclKind::Field { typ, .. } = self[field_id].kind {
@@ -270,7 +291,9 @@ impl TypedAstContext {
                         }
                     }
                 }
-                CExprKind::UnaryType(_, _, _, type_id) => { type_queue.push(type_id.ctype); }
+                CExprKind::UnaryType(_, _, _, type_id) => {
+                    type_queue.push(type_id.ctype);
+                }
                 _ => {}
             }
         }
@@ -279,12 +302,18 @@ impl TypedAstContext {
         let mut bad_variables: HashSet<CDeclId> = HashSet::new();
 
         self.c_decls.retain(|&decl_id, decl| {
-            if live.contains(&decl_id) { return true; }
+            if live.contains(&decl_id) {
+                return true;
+            }
             match &decl.kind {
-                &CDeclKind::Function { body: None, ref parameters, .. } => {
+                &CDeclKind::Function {
+                    body: None,
+                    ref parameters,
+                    ..
+                } => {
                     bad_variables.extend(parameters);
                     false
-                },
+                }
                 _ => true,
             }
         });
@@ -307,28 +336,49 @@ impl TypedAstContext {
         // transitively reachable declarations as live
         let mut types_visited: HashSet<CTypeId> = HashSet::new();
         while let Some(type_id) = type_queue.pop() {
-            if !types_visited.insert(type_id) { continue }
+            if !types_visited.insert(type_id) {
+                continue;
+            }
 
             match self.c_types[&type_id].kind {
                 // Leaf nodes
-                CTypeKind::Void | CTypeKind::Bool | CTypeKind::Char | CTypeKind::SChar |
-                CTypeKind::Short | CTypeKind::Int | CTypeKind::Long | CTypeKind::LongLong |
-                CTypeKind::UChar | CTypeKind::UShort | CTypeKind::UInt | CTypeKind::ULong |
-                CTypeKind::ULongLong | CTypeKind::Float | CTypeKind::Double |
-                CTypeKind::LongDouble | CTypeKind::Int128 | CTypeKind::UInt128 |
-                CTypeKind::TypeOfExpr(_) | CTypeKind::BuiltinFn | CTypeKind::Half => {}
+                CTypeKind::Void
+                | CTypeKind::Bool
+                | CTypeKind::Char
+                | CTypeKind::SChar
+                | CTypeKind::Short
+                | CTypeKind::Int
+                | CTypeKind::Long
+                | CTypeKind::LongLong
+                | CTypeKind::UChar
+                | CTypeKind::UShort
+                | CTypeKind::UInt
+                | CTypeKind::ULong
+                | CTypeKind::ULongLong
+                | CTypeKind::Float
+                | CTypeKind::Double
+                | CTypeKind::LongDouble
+                | CTypeKind::Int128
+                | CTypeKind::UInt128
+                | CTypeKind::TypeOfExpr(_)
+                | CTypeKind::BuiltinFn
+                | CTypeKind::Half => {}
 
                 // Types with CTypeId fields
-                CTypeKind::Complex(type_id) | CTypeKind::Paren(type_id) |
-                CTypeKind::ConstantArray(type_id, _) | CTypeKind::Elaborated(type_id) |
-                CTypeKind::TypeOf(type_id) | CTypeKind::Decayed(type_id) |
-                CTypeKind::IncompleteArray(type_id) | CTypeKind::VariableArray(type_id, _) =>
-                    type_queue.push(type_id),
+                CTypeKind::Complex(type_id)
+                | CTypeKind::Paren(type_id)
+                | CTypeKind::ConstantArray(type_id, _)
+                | CTypeKind::Elaborated(type_id)
+                | CTypeKind::TypeOf(type_id)
+                | CTypeKind::Decayed(type_id)
+                | CTypeKind::IncompleteArray(type_id)
+                | CTypeKind::VariableArray(type_id, _) => type_queue.push(type_id),
 
                 // Types with CQualtypeId fields
-                CTypeKind::Pointer(qtype_id) | CTypeKind::Attributed(qtype_id, _) |
-                CTypeKind::BlockPointer(qtype_id) | CTypeKind::Vector(qtype_id) =>
-                    type_queue.push(qtype_id.ctype),
+                CTypeKind::Pointer(qtype_id)
+                | CTypeKind::Attributed(qtype_id, _)
+                | CTypeKind::BlockPointer(qtype_id)
+                | CTypeKind::Vector(qtype_id) => type_queue.push(qtype_id.ctype),
 
                 CTypeKind::Function(qtype_id, ref qtype_ids, _, _) => {
                     type_queue.push(qtype_id.ctype);
@@ -345,7 +395,11 @@ impl TypedAstContext {
 
                 CTypeKind::Struct(decl_id) => {
                     if live.insert(decl_id) {
-                        if let CDeclKind::Struct { fields: Some(ref arr), .. } = self[decl_id].kind {
+                        if let CDeclKind::Struct {
+                            fields: Some(ref arr),
+                            ..
+                        } = self[decl_id].kind
+                        {
                             live.extend(arr);
                             for &field_id in arr {
                                 if let CDeclKind::Field { typ, .. } = self[field_id].kind {
@@ -358,7 +412,11 @@ impl TypedAstContext {
 
                 CTypeKind::Union(decl_id) => {
                     if live.insert(decl_id) {
-                        if let CDeclKind::Union { fields: Some(ref arr), .. } = self[decl_id].kind {
+                        if let CDeclKind::Union {
+                            fields: Some(ref arr),
+                            ..
+                        } = self[decl_id].kind
+                        {
                             live.extend(arr);
                             for &field_id in arr {
                                 if let CDeclKind::Field { typ, .. } = self[field_id].kind {
@@ -371,7 +429,10 @@ impl TypedAstContext {
 
                 CTypeKind::Enum(decl_id) => {
                     if live.insert(decl_id) {
-                        if let CDeclKind::Enum { variants: ref arr, .. } = self[decl_id].kind {
+                        if let CDeclKind::Enum {
+                            variants: ref arr, ..
+                        } = self[decl_id].kind
+                        {
                             live.extend(arr);
                         }
                     }
@@ -380,9 +441,8 @@ impl TypedAstContext {
         }
 
         // Prune any declaration that isn't considered live
-        self.c_decls.retain(|&decl_id, _decl|
-            live.contains(&decl_id)
-        );
+        self.c_decls
+            .retain(|&decl_id, _decl| live.contains(&decl_id));
 
         // Prune top declarations that are not considered live
         self.c_decls_top.retain(|x| live.contains(x));
@@ -397,17 +457,16 @@ impl CommentContext {
         }
     }
 
-
     // Try to match up every comment with a declaration or a statement
-    pub fn new(
-        ast_context: &mut TypedAstContext
-    ) -> CommentContext {
-
+    pub fn new(ast_context: &mut TypedAstContext) -> CommentContext {
         // Group and sort declarations by file and by position
         let mut decls: HashMap<u64, Vec<(SrcLoc, CDeclId)>> = HashMap::new();
         for (decl_id, ref loc_decl) in &ast_context.c_decls {
             if let Some(loc) = loc_decl.loc {
-                decls.entry(loc.fileid).or_insert(vec![]).push((loc, *decl_id));
+                decls
+                    .entry(loc.fileid)
+                    .or_insert(vec![])
+                    .push((loc, *decl_id));
             }
         }
         decls.iter_mut().for_each(|(_, v)| v.sort());
@@ -416,18 +475,19 @@ impl CommentContext {
         let mut stmts: HashMap<u64, Vec<(SrcLoc, CStmtId)>> = HashMap::new();
         for (stmt_id, ref loc_stmt) in &ast_context.c_stmts {
             if let Some(loc) = loc_stmt.loc {
-                stmts.entry(loc.fileid).or_insert(vec![]).push((loc, *stmt_id));
+                stmts
+                    .entry(loc.fileid)
+                    .or_insert(vec![])
+                    .push((loc, *stmt_id));
             }
         }
         stmts.iter_mut().for_each(|(_, v)| v.sort());
-
 
         let mut decl_comments_map: HashMap<CDeclId, BTreeMap<SrcLoc, String>> = HashMap::new();
         let mut stmt_comments_map: HashMap<CStmtId, BTreeMap<SrcLoc, String>> = HashMap::new();
 
         let empty_vec1 = &vec![];
         let empty_vec2 = &vec![];
-
 
         // Match comments to declarations and statements
         while let Some(Located { loc, kind: str }) = ast_context.comments.pop() {
@@ -437,45 +497,60 @@ impl CommentContext {
 
                 // Find the closest declaration and statement
                 let decl_ix = this_file_decls
-                    .binary_search_by_key(&loc.line, |&(l,_)| l.line)
+                    .binary_search_by_key(&loc.line, |&(l, _)| l.line)
                     .unwrap_or_else(|x| x);
                 let stmt_ix = this_file_stmts
-                    .binary_search_by_key(&loc.line, |&(l,_)| l.line)
+                    .binary_search_by_key(&loc.line, |&(l, _)| l.line)
                     .unwrap_or_else(|x| x);
 
                 // Prefer the one that is higher up (biasing towards declarations if there is a tie)
                 match (this_file_decls.get(decl_ix), this_file_stmts.get(stmt_ix)) {
                     (Some(&(l1, d)), Some(&(l2, s))) => {
                         if l1 > l2 {
-                            stmt_comments_map.entry(s).or_insert(BTreeMap::new()).insert(loc, str);
+                            stmt_comments_map
+                                .entry(s)
+                                .or_insert(BTreeMap::new())
+                                .insert(loc, str);
                         } else {
-                            decl_comments_map.entry(d).or_insert(BTreeMap::new()).insert(loc, str);
+                            decl_comments_map
+                                .entry(d)
+                                .or_insert(BTreeMap::new())
+                                .insert(loc, str);
                         }
                     }
                     (Some(&(_, d)), None) => {
-                        decl_comments_map.entry(d).or_insert(BTreeMap::new()).insert(loc, str);
+                        decl_comments_map
+                            .entry(d)
+                            .or_insert(BTreeMap::new())
+                            .insert(loc, str);
                     }
                     (None, Some(&(_, s))) => {
-                        stmt_comments_map.entry(s).or_insert(BTreeMap::new()).insert(loc, str);
+                        stmt_comments_map
+                            .entry(s)
+                            .or_insert(BTreeMap::new())
+                            .insert(loc, str);
                     }
                     (None, None) => {
                         eprintln!("Didn't find a target node for the comment '{}'", str);
-                    },
+                    }
                 };
             }
         }
 
         // Flatten out the nested comment maps
         let decl_comments = decl_comments_map
-          .into_iter()
-          .map(|(decl_id, map)| (decl_id, map.into_iter().map(|(_, v)| v).collect()))
-          .collect();
+            .into_iter()
+            .map(|(decl_id, map)| (decl_id, map.into_iter().map(|(_, v)| v).collect()))
+            .collect();
         let stmt_comments = stmt_comments_map
-          .into_iter()
-          .map(|(decl_id, map)| (decl_id, map.into_iter().map(|(_, v)| v).collect()))
-          .collect();
+            .into_iter()
+            .map(|(decl_id, map)| (decl_id, map.into_iter().map(|(_, v)| v).collect()))
+            .collect();
 
-        CommentContext { decl_comments, stmt_comments }
+        CommentContext {
+            decl_comments,
+            stmt_comments,
+        }
     }
 
     // Extract the comment for a given declaration
@@ -503,7 +578,10 @@ impl Index<CTypeId> for TypedAstContext {
 impl Index<CExprId> for TypedAstContext {
     type Output = CExpr;
     fn index(&self, index: CExprId) -> &CExpr {
-        static BADEXPR: CExpr = Located { loc: None, kind: CExprKind::BadExpr, };
+        static BADEXPR: CExpr = Located {
+            loc: None,
+            kind: CExprKind::BadExpr,
+        };
         match self.c_exprs.get(&index) {
             None => &BADEXPR, // panic!("Could not find {:?} in TypedAstContext", index),
             Some(ty) => ty,
@@ -540,7 +618,6 @@ pub struct SrcLoc {
     pub line: u64,
     pub column: u64,
 }
-
 
 /// Represents some AST node possibly with source location information bundled with it
 #[derive(Debug, Clone)]
@@ -625,9 +702,15 @@ impl CDeclKind {
             &CDeclKind::Variable { ident: ref i, .. } => Some(i),
             &CDeclKind::Typedef { name: ref i, .. } => Some(i),
             &CDeclKind::EnumConstant { name: ref i, .. } => Some(i),
-            &CDeclKind::Enum { name: Some(ref i), .. } => Some(i),
-            &CDeclKind::Struct { name: Some(ref i), .. } => Some(i),
-            &CDeclKind::Union { name: Some(ref i), .. } => Some(i),
+            &CDeclKind::Enum {
+                name: Some(ref i), ..
+            } => Some(i),
+            &CDeclKind::Struct {
+                name: Some(ref i), ..
+            } => Some(i),
+            &CDeclKind::Union {
+                name: Some(ref i), ..
+            } => Some(i),
             &CDeclKind::Field { name: ref i, .. } => Some(i),
             _ => None,
         }
@@ -656,7 +739,14 @@ pub enum CExprKind {
     OffsetOf(CQualTypeId, u64),
 
     // Binary operator
-    Binary(CQualTypeId, BinOp, CExprId, CExprId, Option<CQualTypeId>, Option<CQualTypeId>),
+    Binary(
+        CQualTypeId,
+        BinOp,
+        CExprId,
+        CExprId,
+        Option<CQualTypeId>,
+        Option<CQualTypeId>,
+    ),
 
     // Implicit cast
     ImplicitCast(CQualTypeId, CExprId, CastKind, Option<CFieldId>),
@@ -721,39 +811,39 @@ impl CExprKind {
     pub fn get_qual_type(&self) -> Option<CQualTypeId> {
         match *self {
             CExprKind::BadExpr => None,
-            CExprKind::Literal(ty, _) |
-            CExprKind::OffsetOf(ty, _) |
-            CExprKind::Unary(ty, _, _) |
-            CExprKind::UnaryType(ty, _, _, _) |
-            CExprKind::Binary(ty, _, _, _, _, _) |
-            CExprKind::ImplicitCast(ty, _, _, _) |
-            CExprKind::ExplicitCast(ty, _, _, _) |
-            CExprKind::DeclRef(ty, _) |
-            CExprKind::Call(ty, _, _) |
-            CExprKind::Member(ty, _, _, _) |
-            CExprKind::ArraySubscript(ty, _, _) |
-            CExprKind::Conditional(ty, _, _, _) |
-            CExprKind::BinaryConditional(ty, _, _) |
-            CExprKind::InitList(ty, _, _, _) |
-            CExprKind::ImplicitValueInit(ty) |
-            CExprKind::CompoundLiteral(ty, _) |
-            CExprKind::Predefined(ty, _) |
-            CExprKind::Statements(ty, _) |
-            CExprKind::VAArg(ty, _) |
-            CExprKind::ShuffleVector(ty) |
-            CExprKind::ConvertVector(ty) |
-            CExprKind::DesignatedInitExpr(ty,_,_) => Some(ty),
+            CExprKind::Literal(ty, _)
+            | CExprKind::OffsetOf(ty, _)
+            | CExprKind::Unary(ty, _, _)
+            | CExprKind::UnaryType(ty, _, _, _)
+            | CExprKind::Binary(ty, _, _, _, _, _)
+            | CExprKind::ImplicitCast(ty, _, _, _)
+            | CExprKind::ExplicitCast(ty, _, _, _)
+            | CExprKind::DeclRef(ty, _)
+            | CExprKind::Call(ty, _, _)
+            | CExprKind::Member(ty, _, _, _)
+            | CExprKind::ArraySubscript(ty, _, _)
+            | CExprKind::Conditional(ty, _, _, _)
+            | CExprKind::BinaryConditional(ty, _, _)
+            | CExprKind::InitList(ty, _, _, _)
+            | CExprKind::ImplicitValueInit(ty)
+            | CExprKind::CompoundLiteral(ty, _)
+            | CExprKind::Predefined(ty, _)
+            | CExprKind::Statements(ty, _)
+            | CExprKind::VAArg(ty, _)
+            | CExprKind::ShuffleVector(ty)
+            | CExprKind::ConvertVector(ty)
+            | CExprKind::DesignatedInitExpr(ty, _, _) => Some(ty),
         }
     }
 
     pub fn get_type(&self) -> Option<CTypeId> {
-        self.get_qual_type().map(|x|x.ctype)
+        self.get_qual_type().map(|x| x.ctype)
     }
 
     /// Try to determine the truthiness or falsiness of the expression. Return `None` if we can't
     /// say anything.
     pub fn get_bool(&self) -> Option<bool> {
-        match *self{
+        match *self {
             CExprKind::Literal(_, ref lit) => Some(lit.get_bool()),
             _ => None,
         }
@@ -796,20 +886,20 @@ pub enum CastKind {
 /// Represents a unary operator in C (6.5.3 Unary operators) and GNU C extensions
 #[derive(Debug, Clone, Copy)]
 pub enum UnOp {
-    AddressOf,      // &x
-    Deref,          // *x
-    Plus,           // +x
-    PostIncrement,  // x++
-    PreIncrement,   // ++x
-    Negate,         // -x
-    PostDecrement,  // x--
-    PreDecrement,   // --x
-    Complement,     // ~x
-    Not,            // !x
-    Real,           // [GNU C] __real x
-    Imag,           // [GNU C] __imag x
-    Extension,      // [GNU C] __extension__ x
-    Coawait,        // [C++ Coroutines] co_await x
+    AddressOf,     // &x
+    Deref,         // *x
+    Plus,          // +x
+    PostIncrement, // x++
+    PreIncrement,  // ++x
+    Negate,        // -x
+    PostDecrement, // x--
+    PreDecrement,  // --x
+    Complement,    // ~x
+    Not,           // !x
+    Real,          // [GNU C] __real x
+    Imag,          // [GNU C] __imag x
+    Extension,     // [GNU C] __extension__ x
+    Coawait,       // [C++ Coroutines] co_await x
 }
 
 /// Represents a unary type operator in C
@@ -820,7 +910,6 @@ pub enum UnTypeOp {
 }
 
 impl UnOp {
-
     /// Check is the operator is rendered before or after is operand.
     pub fn is_prefix(&self) -> bool {
         match *self {
@@ -834,24 +923,24 @@ impl UnOp {
 /// Represents a binary operator in C (6.5.5 Multiplicative operators - 6.5.14 Logical OR operator)
 #[derive(Debug, Clone, Copy)]
 pub enum BinOp {
-    Multiply,         // *
-    Divide,           // /
-    Modulus,          // %
-    Add,              // +
-    Subtract,         // -
-    ShiftLeft,        // <<
-    ShiftRight,       // >>
-    Less,             // <
-    Greater,          // >
-    LessEqual,        // <=
-    GreaterEqual,     // >=
-    EqualEqual,       // ==
-    NotEqual,         // !=
-    BitAnd,           // &
-    BitXor,           // ^
-    BitOr,            // |
-    And,              // &&
-    Or,               // ||
+    Multiply,     // *
+    Divide,       // /
+    Modulus,      // %
+    Add,          // +
+    Subtract,     // -
+    ShiftLeft,    // <<
+    ShiftRight,   // >>
+    Less,         // <
+    Greater,      // >
+    LessEqual,    // <=
+    GreaterEqual, // >=
+    EqualEqual,   // ==
+    NotEqual,     // !=
+    BitAnd,       // &
+    BitXor,       // ^
+    BitOr,        // |
+    And,          // &&
+    Or,           // ||
 
     AssignAdd,        // +=
     AssignSubtract,   // -=
@@ -864,12 +953,11 @@ pub enum BinOp {
     AssignBitOr,      // |=
     AssignBitAnd,     // &=
 
-    Assign,           // =
-    Comma,            // ,
+    Assign, // =
+    Comma,  // ,
 }
 
 impl BinOp {
-
     /// Maps compound assignment operators to operator underlying them, and returns `None` for all
     /// other operators.
     ///
@@ -893,7 +981,9 @@ impl BinOp {
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum IntBase {
-    Dec, Hex, Oct
+    Dec,
+    Hex,
+    Oct,
 }
 
 #[derive(Debug, Clone)]
@@ -907,12 +997,11 @@ pub enum CLiteral {
 impl CLiteral {
     /// Determine the truthiness or falsiness of the literal.
     pub fn get_bool(&self) -> bool {
-        match *self{
+        match *self {
             CLiteral::Integer(x, _) => x != 0u64,
             CLiteral::Character(x) => x != 0u64,
             CLiteral::Floating(x) => x != 0f64,
-            _ => true
-
+            _ => true,
         }
     }
 }
@@ -998,7 +1087,6 @@ pub struct AsmOperand {
 /// Type qualifiers (6.7.3)
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct Qualifiers {
-
     /// The `const` qualifier, which marks lvalues as non-assignable.
     ///
     /// We make use of `const` in only two places:
@@ -1022,7 +1110,6 @@ pub struct Qualifiers {
 }
 
 impl Qualifiers {
-
     /// Aggregate qualifier information from two sources.
     pub fn and(self, other: Qualifiers) -> Qualifiers {
         Qualifiers {
@@ -1039,7 +1126,6 @@ pub struct CQualTypeId {
     pub qualifiers: Qualifiers,
     pub ctype: CTypeId,
 }
-
 
 // TODO: these may be interesting, but I'm not sure if they fit here:
 //
@@ -1064,16 +1150,27 @@ pub enum CTypeKind {
     Char,
 
     // Signed types (6.2.5.4)
-    SChar, Short, Int, Long, LongLong,
+    SChar,
+    Short,
+    Int,
+    Long,
+    LongLong,
 
     // Unsigned types (6.2.5.6) (actually this also includes `_Bool`)
-    UChar, UShort, UInt, ULong, ULongLong,
+    UChar,
+    UShort,
+    UInt,
+    ULong,
+    ULongLong,
 
     // Real floating types (6.2.5.10). Ex: `double`
-    Float, Double, LongDouble,
+    Float,
+    Double,
+    LongDouble,
 
     // Clang specific types
-    Int128, UInt128,
+    Int128,
+    UInt128,
 
     /* Compound types <https://github.com/llvm-mirror/clang/blob/master/include/clang/AST/TypeNodes.def> */
 
@@ -1138,7 +1235,7 @@ pub enum CTypeKind {
 #[derive(Copy, Clone, Debug)]
 pub enum Designator {
     Index(u64),
-    Range(u64,u64),
+    Range(u64, u64),
     Field(CFieldId),
 }
 
@@ -1150,10 +1247,9 @@ pub enum Attribute {
 }
 
 impl CTypeKind {
-
     pub fn is_pointer(&self) -> bool {
         match *self {
-            CTypeKind::Pointer{..} => true,
+            CTypeKind::Pointer { .. } => true,
             _ => false,
         }
     }
@@ -1167,7 +1263,7 @@ impl CTypeKind {
 
     pub fn is_enum(&self) -> bool {
         match *self {
-            CTypeKind::Enum{..} => true,
+            CTypeKind::Enum { .. } => true,
             _ => false,
         }
     }
@@ -1213,10 +1309,10 @@ impl CTypeKind {
 
     pub fn as_underlying_decl(&self) -> Option<CDeclId> {
         match *self {
-            CTypeKind::Struct(decl_id) |
-            CTypeKind::Union(decl_id) |
-            CTypeKind::Enum(decl_id) => Some(decl_id),
-            _ => None
+            CTypeKind::Struct(decl_id) | CTypeKind::Union(decl_id) | CTypeKind::Enum(decl_id) => {
+                Some(decl_id)
+            }
+            _ => None,
         }
     }
 }
