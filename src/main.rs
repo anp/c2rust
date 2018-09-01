@@ -15,7 +15,7 @@ use std::io::prelude::*;
 use std::io::{stdout, Error};
 
 fn main() {
-    let matches = App::new("AST Importer")
+    let matches = App::new("c2rust")
         .version("0.1.0")
         .author(crate_authors!())
 
