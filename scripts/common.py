@@ -96,7 +96,7 @@ add_subdirectory(ast-exporter)
     CUSTOM_RUST_RUSTC_VERSION = "rustc 1.28.0-nightly (f28c7aef7 2018-06-19)"
 
     def __init__(self):
-        self.LLVM_ARCHIVE_URLS = [s.format(ver=Config.LLVM_VER) 
+        self.LLVM_ARCHIVE_URLS = [s.format(ver=Config.LLVM_VER)
                                   for s in Config.LLVM_ARCHIVE_URLS]
         self.LLVM_SIGNATURE_URLS = [s + ".sig" for s in self.LLVM_ARCHIVE_URLS]
         self.LLVM_ARCHIVE_FILES = [os.path.basename(s)
@@ -419,11 +419,12 @@ def ensure_clang_version(min_ver: List[int]):
             logging.warning("unknown clang version: " + version)
             die("unable to identify clang version")
 
-    if on_linux():
+    if on_linux() or on_mac():
         m = re.search(r"clang\s+version\s([^\s-]+)", version)
-        _common_check(m)
-    elif on_mac():
-        m = re.search(r"Apple\sLLVM\sversion\s([^\s-]+)", version)
+
+        if not m and on_mac():
+            m = re.search(r"Apple\sLLVM\sversion\s([^\s-]+)", version)
+
         _common_check(m)
     else:
         assert False, "run this script on macOS or linux"
