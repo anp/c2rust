@@ -445,7 +445,8 @@ class TestDirectory:
                            "panic!(\"Tried to run unknown test: {:?}\", e)"))
 
         test_main_body = [
-            RustMatch("std::env::args().nth(1).as_ref().map(AsRef::<str>::as_ref)", match_arms),
+            RustMatch(
+                "std::env::args().nth(1).as_ref().map(AsRef::<str>::as_ref)", match_arms),
         ]
         test_main = RustFunction("main",
                                  visibility=RustVisibility.Public,
@@ -463,7 +464,8 @@ class TestDirectory:
         except NonZeroReturn as exception:
             _, main_file_path_short = os.path.split(main_file.path)
 
-            self.print_status(Colors.FAIL, "FAILED", "compile {}".format(main_file_path_short))
+            self.print_status(Colors.FAIL, "FAILED",
+                              "compile {}".format(main_file_path_short))
             sys.stdout.write('\n')
             sys.stdout.write(str(exception))
 
@@ -481,7 +483,8 @@ class TestDirectory:
             extensionless_file_name, _ = os.path.splitext(file_name)
 
             for test_function in test_file.test_functions:
-                args = ["{}::{}".format(extensionless_file_name, test_function.name)]
+                args = ["{}::{}".format(
+                    extensionless_file_name, test_function.name)]
 
                 retcode, stdout, stderr = main[args].run(retcode=None)
 
@@ -491,25 +494,29 @@ class TestDirectory:
 
                 if retcode == 0:
                     if test_function.pass_expected:
-                        self.print_status(Colors.OKGREEN, "OK", "    test " + test_str)
+                        self.print_status(Colors.OKGREEN, "OK",
+                                          "    test " + test_str)
                         sys.stdout.write('\n')
 
                         outcomes.append(TestOutcome.Success)
                     else:
-                        self.print_status(Colors.FAIL, "FAILED", "test " + test_str)
+                        self.print_status(
+                            Colors.FAIL, "FAILED", "test " + test_str)
                         sys.stdout.write('\n')
 
                         outcomes.append(TestOutcome.UnexpectedSuccess)
 
                 elif retcode != 0:
                     if test_function.pass_expected:
-                        self.print_status(Colors.FAIL, "FAILED", "test " + test_str)
+                        self.print_status(
+                            Colors.FAIL, "FAILED", "test " + test_str)
                         sys.stdout.write('\n')
                         sys.stdout.write(stderr)
 
                         outcomes.append(TestOutcome.UnexpectedFailure)
                     else:
-                        self.print_status(Colors.OKBLUE, "FAILED", "test " + test_str)
+                        self.print_status(
+                            Colors.OKBLUE, "FAILED", "test " + test_str)
                         sys.stdout.write('\n')
 
                         outcomes.append(TestOutcome.Failure)
