@@ -1,0 +1,12 @@
+[package]
+name = "c2rust"
+version = "0.1.0"
+authors = ["Adam Perry <adam.n.perry@gmail.com>"]
+
+[dependencies]
+
+[workspace]
+members = [
+    "ast-importer",
+    "rust-refactor"
+]
