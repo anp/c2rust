@@ -23,11 +23,21 @@ llvm.build*
 
 # tests
 !tests
-tests/*.rs
-tests/*.a
-tests/*.json
-tests/*.cbor
-tests/*_c
-tests/*_rust
-tests/*_c.txt
-tests/*_rust.txt
+tests/**/*.rs
+tests/**/*.a
+tests/**/*.json
+tests/**/*.cbor
+tests/**/*_c
+tests/**/*_rust
+tests/**/*_c.txt
+tests/**/*_rust.txt
+tests/**/*_main
+
+
+target*
+**/*.rs.bk
+*.o.tmp
+*.o
+*.a
+*.so
+**/*.ld_*
