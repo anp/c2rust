@@ -13,7 +13,7 @@ llvm.build*
 *.pyc
 .vagrant
 **/compile_commands.json
-**/Cargo.lock
+/*/**/Cargo.lock
 .python-version
 
 # cross-checks
