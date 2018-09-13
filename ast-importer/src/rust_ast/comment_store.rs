@@ -8,7 +8,7 @@
 //! The logic for creating/storing a comment vector is in `CommentStore`. For example, if you want
 //! to add a comment to a match arm:
 //!
-//! ```rust
+//! ```ignore
 //!   let sp: Span = cmmt_store.add_comment_lines(vec!["Some comment on an arm"]);
 //!   let arm = mk().span(sp).arm(pats, None, body);
 //!   ...
@@ -17,7 +17,7 @@
 //! Right before printing the output, it is a good idea to use the `CommentTraverser` to make sure
 //! that the comment vector is in the right order. That just means doing something like this:
 //!
-//! ```rust
+//! ```ignore
 //!   let trav: CommentTraverser = cmmt_store.into_comment_traverser();
 //!   let updated_module: Mod = trav.traverse_mod(module);
 //!   let updated_cmmt_store = trav.into_comment_store();
