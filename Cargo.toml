@@ -2,8 +2,14 @@
 name = "c2rust"
 version = "0.1.0"
 authors = ["Adam Perry <adam.n.perry@gmail.com>"]
+build = "build.rs"
 
-[dependencies]
+[dev-dependencies]
+libc = "0.2"
+build-support = { path = "./build-support" }
+
+[build-dependencies]
+build-support = { path = "./build-support" }
 
 [workspace]
 members = [

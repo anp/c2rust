@@ -528,21 +528,22 @@ class TestDirectory:
         return outcomes
 
     def cleanup(self) -> None:
-        if "all" in self.keep:
-            return
+        pass
+    #     if "all" in self.keep:
+    #         return
 
-        for file_type, file_paths in self.generated_files.items():
-            if file_type in self.keep:
-                continue
+    #     for file_type, file_paths in self.generated_files.items():
+    #         if file_type in self.keep:
+    #             continue
 
-            # Try remove files and don't barf if they don't exist
-            for file_path in file_paths:
-                try:
-                    # FIXME: Hacky. Some items are string paths,
-                    # others are classes with a path attribute
-                    os.remove(getattr(file_path, "path", file_path))
-                except OSError:
-                    pass
+    #         # Try remove files and don't barf if they don't exist
+    #         for file_path in file_paths:
+    #             try:
+    #                 # FIXME: Hacky. Some items are string paths,
+    #                 # others are classes with a path attribute
+    #                 os.remove(getattr(file_path, "path", file_path))
+    #             except OSError:
+    #                 pass
 
 
 def readable_directory(directory: str) -> str:

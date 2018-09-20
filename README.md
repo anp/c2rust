@@ -23,17 +23,17 @@ There are three ways to build the C2Rust project:
 
 1. In the provided vagrant environment. See the [vagrant README](vagrant/README.md)
 2. In the provided docker environment. See the [docker README](docker/README.md)
-3. Building directly on a macOS or Linux host. The previous two options automatically install all pre-requisites during provisioning. With this option, prerequisites must be installed manually. 
-    - If you are on a Debian-based OS, you can run `provision_deb.sh` to do so. 
+3. Building directly on a macOS or Linux host. The previous two options automatically install all pre-requisites during provisioning. With this option, prerequisites must be installed manually.
+    - If you are on a Debian-based OS, you can run `provision_deb.sh` to do so.
     - If you are on macOS, install the Xcode command-line tools (e.g., `xcode-select --install`) and [homebrew](https://brew.sh/) first. Then run `provision_mac.sh`.
-   
-*NOTE*: The translator supports both macOS and Linux. Other features, such as cross checking the functionality between C and Rust code, are currently limited to Linux hosts. 
+
+*NOTE*: The translator supports both macOS and Linux. Other features, such as cross checking the functionality between C and Rust code, are currently limited to Linux hosts.
 
 ### Building
 
-These two projects have some large dependencies (namely parts of LLVM and Clang). If 
-you've installed  the necessary tools, the following should build `ast-exporter` and 
-`ast-importer` and all of their dependencies, automatically pulling them in if 
+These two projects have some large dependencies (namely parts of LLVM and Clang). If
+you've installed  the necessary tools, the following should build `ast-exporter` and
+`ast-importer` and all of their dependencies, automatically pulling them in if
 necessary.
 
 Building from scratch takes on the order of 30 minutes. The script has been tested on recent versions of macOS and Ubuntu.
@@ -48,7 +48,7 @@ To manually build the `ast-exporter`, check out [these build instructions][0]. T
 Tests are found in the [`tests`](tests) folder. If both the `ast-exporter` and `ast-importer` are
 built, you should be able to run the tests with
 
-    $ ./scripts/test_translator.py tests
+    $ cargo test
 
 This basically tests that the original C file and translated Rust file produce the same output when
 compiled and run. More details about tests are in [this README](tests/README.md).
@@ -104,8 +104,8 @@ source files mentioned in the previously generated
 This material is available under the BSD-3 style license as found in the
 `LICENSE` file.
 
-The C2Rust translator is inspired by Jamey Sharp's [Corrode](https://github.com/jameysharp/corrode) translator. We rely on 
-[Emscripten](https://github.com/kripken/emscripten)'s 
+The C2Rust translator is inspired by Jamey Sharp's [Corrode](https://github.com/jameysharp/corrode) translator. We rely on
+[Emscripten](https://github.com/kripken/emscripten)'s
 Relooper algorithm to translate arbitrary C control flows.
 
 This material is based upon work supported by the United States Air Force and
